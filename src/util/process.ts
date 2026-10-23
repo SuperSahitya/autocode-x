@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 export interface RunResult {
   output: string;
@@ -61,11 +61,14 @@ export function runProcess(command: string, args: string[], opts: RunOptions): P
   });
 }
 
-export function killTree(pid: number | undefined): void {
+export function killTree(pid: number | undefined, sync = false): void {
   if (!pid) return;
   try {
     if (process.platform === "win32") {
-      spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+      const args = ["/pid", String(pid), "/T", "/F"];
+      const opts = { stdio: "ignore", windowsHide: true } as const;
+      if (sync) spawnSync("taskkill", args, opts);
+      else spawn("taskkill", args, opts);
     } else {
       process.kill(-pid, "SIGKILL");
     }

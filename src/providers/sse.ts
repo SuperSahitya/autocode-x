@@ -87,7 +87,15 @@ export async function postWithRetry(
   }
 }
 
-const backoff = (attempt: number) => Math.min(1000 * 2 ** attempt, 15_000) + Math.random() * 250;
+export async function getJSON(url: string, headers: Record<string, string>): Promise<any> {
+  const res = await fetch(url, { headers }).catch((err: Error) => {
+    throw new ProviderError(`Request to ${url} failed: ${err.message}`);
+  });
+  if (!res.ok) throw new ProviderError(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status);
+  return res.json();
+}
+
+const backoff =(attempt: number) => Math.min(1000 * 2 ** attempt, 15_000) + Math.random() * 250;
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {

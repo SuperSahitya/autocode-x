@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { ProcessManager } from "./processes.js";
 import type { ShellInfo } from "./shell.js";
 
 export type ToolKind = "read" | "write" | "exec";
@@ -9,6 +10,7 @@ export interface ToolContext {
   shell: ShellInfo;
   /** abs path -> mtimeMs at last read/write */
   fileState: Map<string, number>;
+  processes: ProcessManager;
 }
 
 export interface ToolOutput {

@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "../src/tools/types.js";
+import { ProcessManager } from "../src/tools/processes.js";
 import { detectShell } from "../src/tools/shell.js";
 
 export const tempDir = () => mkdtempSync(join(tmpdir(), "autocode-test-"));
@@ -13,6 +14,7 @@ export const makeCtx = (cwd: string): ToolContext => ({
   signal: new AbortController().signal,
   shell: detectShell(),
   fileState: new Map(),
+  processes: new ProcessManager(),
 });
 
 /**

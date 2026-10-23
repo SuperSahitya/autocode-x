@@ -1,5 +1,5 @@
 import type { ChatRequest, Message, Provider, StopReason, StreamEvent, ToolCallPart, Usage } from "../types.js";
-import { parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
+import { getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
 
 export interface OpenAIOptions {
   model: string;
@@ -23,6 +23,11 @@ export class OpenAIProvider implements Provider {
     this.headers = { ...opts.headers };
     if (opts.apiKey) this.headers.authorization = `Bearer ${opts.apiKey}`;
     this.maxTokensParam = this.baseUrl.includes("api.openai.com") ? "max_completion_tokens" : "max_tokens";
+  }
+
+  async listModels(): Promise<string[]> {
+    const res = await getJSON(`${this.baseUrl}/models`, this.headers);
+    return res.data.map((m: { id: string }) => m.id).sort();
   }
 
   async *stream(req: ChatRequest): AsyncGenerator<StreamEvent> {

@@ -6,7 +6,8 @@ import { Agent } from "../src/agent/agent.js";
 import { Permissions } from "../src/agent/permissions.js";
 import { AnthropicProvider } from "../src/providers/anthropic.js";
 import { OpenAIProvider } from "../src/providers/openai.js";
-import { ToolRegistry } from "../src/tools/index.js";
+import { DEFAULT_TOOLS, ToolRegistry } from "../src/tools/index.js";
+import { GeminiProvider } from "../src/providers/gemini.js";
 import { detectShell } from "../src/tools/shell.js";
 import type { Provider } from "../src/types.js";
 import { mockSSEServer, tempDir } from "./helpers.js";
@@ -47,7 +48,7 @@ test("OpenAI-compatible: streamed tool call → tool runs → final answer", asy
     assert.equal(msgs[2].tool_calls[0].function.name, "write_file");
     assert.equal(msgs[3].tool_call_id, "call_1");
     assert.match(msgs[3].content, /Created hello.txt/);
-    assert.equal(server.requests[0].tools.length, 7);
+    assert.equal(server.requests[0].tools.length, DEFAULT_TOOLS.length);
   } finally {
     server.close();
   }
@@ -90,6 +91,46 @@ test("Anthropic: input_json_delta assembly, tool_result round-trip, cache breakp
     assert.deepEqual(assistant.content[1], { type: "tool_use", id: "toolu_1", name: "write_file", input: JSON.parse(writeArgs) });
     assert.equal(toolTurn.content[0].tool_use_id, "toolu_1");
     assert.equal(toolTurn.content.at(-1).cache_control.type, "ephemeral");
+  } finally {
+    server.close();
+  }
+});
+
+test("Gemini: function call with thought signature round-trips", async () => {
+  const args = JSON.parse(writeArgs);
+  const server = await mockSSEServer([
+    [
+      { candidates: [{ content: { role: "model", parts: [{ text: "thinking...", thought: true }, { text: "Writing it." }] } }] },
+      {
+        candidates: [
+          {
+            content: { role: "model", parts: [{ functionCall: { name: "write_file", args }, thoughtSignature: "sig-abc" }] },
+            finishReason: "STOP",
+          },
+        ],
+        usageMetadata: { promptTokenCount: 120, cachedContentTokenCount: 20, candidatesTokenCount: 10, thoughtsTokenCount: 5 },
+      },
+    ],
+    [{ candidates: [{ content: { role: "model", parts: [{ text: "Done." }] }, finishReason: "STOP" }] }],
+  ]);
+  try {
+    const cwd = tempDir();
+    const agent = makeAgent(new GeminiProvider({ model: "mock", apiKey: "k", baseUrl: server.url }), cwd);
+    let text = "";
+    await agent.run("make hello.txt", { onText: (d) => (text += d) });
+
+    assert.equal(text, "Writing it.Done.", "thought parts are not shown");
+    assert.equal(readFileSync(join(cwd, "hello.txt"), "utf8"), "hi there\n");
+    assert.deepEqual(agent.totalUsage, { inputTokens: 100, outputTokens: 15, cacheReadTokens: 20, cacheWriteTokens: 0 });
+
+    const req = server.requests[1];
+    assert.equal(req.systemInstruction.parts[0].text, "test");
+    assert.ok(req.tools[0].functionDeclarations[0].parametersJsonSchema);
+    const [, model, user] = req.contents;
+    assert.equal(model.role, "model");
+    assert.deepEqual(model.parts[1], { functionCall: { name: "write_file", args }, thoughtSignature: "sig-abc" });
+    assert.equal(user.parts[0].functionResponse.name, "write_file");
+    assert.match(user.parts[0].functionResponse.response.output, /Created hello.txt/);
   } finally {
     server.close();
   }

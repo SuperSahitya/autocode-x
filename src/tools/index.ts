@@ -1,11 +1,21 @@
 import { z } from "zod";
 import type { ToolCallPart, ToolSpec } from "../types.js";
-import { bashTool } from "./bash.js";
+import { bashOutputTool, bashTool, killProcessTool } from "./bash.js";
 import { editFileTool, listDirTool, readFileTool, writeFileTool } from "./fs.js";
 import { globTool, grepTool } from "./search.js";
 import { ToolError, type Tool, type ToolContext, type ToolOutput } from "./types.js";
 
-export const DEFAULT_TOOLS: Tool[] = [readFileTool, writeFileTool, editFileTool, listDirTool, globTool, grepTool, bashTool];
+export const DEFAULT_TOOLS: Tool[] = [
+  readFileTool,
+  writeFileTool,
+  editFileTool,
+  listDirTool,
+  globTool,
+  grepTool,
+  bashTool,
+  bashOutputTool,
+  killProcessTool,
+];
 
 export class ToolRegistry {
   private readonly tools = new Map<string, Tool>();

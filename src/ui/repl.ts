@@ -8,7 +8,9 @@ import type { Renderer } from "./render.js";
 const HELP = `Commands:
   /help           Show this help
   /clear          Start a new conversation
-  /model [name]   Show or switch the model (same provider)
+  /model [spec]   Show or switch: <model>, <profile> or <profile>:<model>
+  /models         List models available from the current provider
+  /ps             List background processes
   /yolo           Toggle auto-approve for writes and commands
   /usage          Show token usage for this session
   /exit           Quit
@@ -18,7 +20,9 @@ export interface ReplDeps {
   agent: Agent;
   permissions: Permissions;
   renderer: Renderer;
-  setModel(model: string): void;
+  /** returns a label for the new model; throws if the spec is invalid */
+  switchModel(spec: string): string;
+  modelLabel(): string;
 }
 
 export class Repl {
@@ -124,9 +128,29 @@ export class Repl {
         renderer.info("Conversation cleared.");
         break;
       case "model":
-        if (arg) this.deps.setModel(arg);
-        renderer.info(`Model: ${agent.provider.name}/${agent.provider.model}`);
+        try {
+          renderer.info(`Model: ${arg ? this.deps.switchModel(arg) : this.deps.modelLabel()}`);
+        } catch (err) {
+          renderer.error((err as Error).message);
+        }
         break;
+      case "models":
+        try {
+          const models = await agent.provider.listModels();
+          renderer.info(models.map((m) => (m === agent.provider.model ? `* ${m}` : `  ${m}`)).join("\n"));
+        } catch (err) {
+          renderer.error(`Could not list models: ${(err as Error).message}`);
+        }
+        break;
+      case "ps": {
+        const procs = agent.processes.list();
+        renderer.info(
+          procs.length
+            ? procs.map((p) => `${p.id}  ${p.running ? "running" : `exited ${p.exitCode}`}  ${p.command}`).join("\n")
+            : "No background processes.",
+        );
+        break;
+      }
       case "yolo":
         permissions.mode = permissions.mode === "auto" ? "ask" : "auto";
         renderer.info(permissions.mode === "auto" ? "Auto-approve ON: writes and commands run without asking." : "Auto-approve OFF.");

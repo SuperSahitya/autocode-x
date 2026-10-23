@@ -1,4 +1,5 @@
 import type { ToolRegistry } from "../tools/index.js";
+import { ProcessManager } from "../tools/processes.js";
 import type { ShellInfo } from "../tools/shell.js";
 import type { Tool, ToolContext, ToolOutput } from "../tools/types.js";
 import type { Message, Provider, StopReason, TextPart, ToolCallPart, ToolResultPart, Usage } from "../types.js";
@@ -34,10 +35,15 @@ export class Agent {
   readonly messages: Message[] = [];
   readonly totalUsage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   provider: Provider;
+  readonly processes = new ProcessManager();
   private readonly fileState = new Map<string, number>();
 
   constructor(private readonly opts: AgentOptions) {
     this.provider = opts.provider;
+  }
+
+  dispose(): void {
+    this.processes.killAll();
   }
 
   clear(): void {
@@ -91,7 +97,13 @@ export class Agent {
   }
 
   private async runTools(calls: ToolCallPart[], events: AgentEvents, signal: AbortSignal) {
-    const ctx: ToolContext = { cwd: this.opts.cwd, signal, shell: this.opts.shell, fileState: this.fileState };
+    const ctx: ToolContext = {
+      cwd: this.opts.cwd,
+      signal,
+      shell: this.opts.shell,
+      fileState: this.fileState,
+      processes: this.processes,
+    };
     const prepared: PreparedCall[] = calls.map((call) => {
       const parsed = this.opts.tools.parse(call);
       if ("error" in parsed) return { call, error: parsed.error, summary: "" };

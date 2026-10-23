@@ -90,6 +90,28 @@ test("bash returns output and exit code", async () => {
   assert.match(r.output, /exit code 3/);
 });
 
+test("background process: start, read output, kill", async () => {
+  const ctx = makeCtx(tempDir());
+  try {
+    const script = "console.log('ready'); setInterval(() => console.log('tick'), 100)";
+    let r = await call("bash", { command: `node -e "${script}"`, run_in_background: true }, ctx);
+    assert.match(r.output, /Started bg1/);
+    assert.match(r.output, /ready/);
+    assert.match(r.output, /bg1 running/);
+
+    r = await call("bash_output", { id: "bg1", wait_ms: 2000 }, ctx);
+    assert.match(r.output, /tick/);
+    assert.doesNotMatch(r.output, /ready/, "only new output is returned");
+
+    r = await call("kill_process", { id: "bg1" }, ctx);
+    assert.match(r.output, /Killed bg1/);
+    await new Promise((res) => setTimeout(res, 1000));
+    assert.match((await call("bash_output", {}, ctx)).output, /bg1 exited/);
+  } finally {
+    ctx.processes.killAll();
+  }
+});
+
 test("invalid arguments are reported back, not thrown", async () => {
   const r = await call("read_file", { nope: true });
   assert.equal(r.isError, true);

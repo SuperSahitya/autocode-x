@@ -1,5 +1,5 @@
 import type { ChatRequest, Message, Provider, StopReason, StreamEvent, Usage } from "../types.js";
-import { ProviderError, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
+import { ProviderError, getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
 
 export interface AnthropicOptions {
   model: string;
@@ -19,6 +19,15 @@ export class AnthropicProvider implements Provider {
     this.baseUrl = (opts.baseUrl ?? "https://api.anthropic.com").replace(/\/+$/, "");
   }
 
+  async listModels(): Promise<string[]> {
+    const res = await getJSON(`${this.baseUrl}/v1/models?limit=100`, this.headers());
+    return res.data.map((m: { id: string }) => m.id);
+  }
+
+  private headers() {
+    return { "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" };
+  }
+
   async *stream(req: ChatRequest): AsyncGenerator<StreamEvent> {
     const body = {
       model: this.model,
@@ -29,12 +38,7 @@ export class AnthropicProvider implements Provider {
       tools: req.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })),
       messages: toAnthropicMessages(req.messages),
     };
-    const res = await postWithRetry(
-      `${this.baseUrl}/v1/messages`,
-      { "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
-      body,
-      req.signal,
-    );
+    const res = await postWithRetry(`${this.baseUrl}/v1/messages`, this.headers(), body, req.signal);
 
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     let stopReason: StopReason = "other";

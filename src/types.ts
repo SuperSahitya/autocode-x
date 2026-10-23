@@ -8,6 +8,8 @@ export interface ToolCallPart {
   id: string;
   name: string;
   input: unknown;
+  /** provider-specific data that must be sent back as-is, e.g. Gemini thought signatures */
+  meta?: Record<string, string>;
 }
 
 export interface ToolResultPart {
@@ -54,4 +56,5 @@ export interface Provider {
   readonly name: string;
   readonly model: string;
   stream(req: ChatRequest): AsyncIterable<StreamEvent>;
+  listModels(): Promise<string[]>;
 }

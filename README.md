@@ -1,6 +1,6 @@
 # autocode
 
-A coding agent for the terminal. Works with Anthropic, OpenAI and OpenAI-compatible servers (Ollama, Groq, OpenRouter, ...).
+A coding agent for the terminal. Works with Gemini, Anthropic, Groq, Ollama and any OpenAI-compatible server.
 
 ## Setup
 
@@ -10,26 +10,29 @@ npm run build
 npm link
 ```
 
+Set the key for the provider you use: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY` or `GROQ_API_KEY`. Ollama needs none.
+
 ## Usage
 
 ```
-autocode                          # interactive
-autocode --profile ollama         # use a profile
-autocode -m <model>               # override the model
-autocode -p "fix the build" -y    # one-shot, auto-approve
+autocode                              # interactive
+autocode -m gemini                    # pick a profile
+autocode -m gemini:gemini-3.6-flash   # profile and model
+autocode -p "fix the build" -y        # one-shot, auto-approve
+autocode --list-profiles
 ```
 
-In the REPL: `/help`, `/clear`, `/model`, `/yolo`, `/usage`, `/exit`. Ctrl+C interrupts the agent.
+In the REPL: `/model`, `/models`, `/ps`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`. Ctrl+C interrupts the agent.
 
 ## Config
 
-`~/.autocode/config.json`:
+Built-in profiles: `gemini`, `anthropic`, `groq`, `ollama`. Add or override them in `~/.autocode/config.json`:
 
 ```json
 {
-  "defaultProfile": "ollama",
+  "defaultProfile": "gemini",
   "profiles": {
-    "ollama": { "provider": "openai", "model": "qwen2.5-coder:14b", "baseUrl": "http://localhost:11434/v1" },
+    "ollama": { "provider": "openai", "model": "qwen2.5-coder:32b", "baseUrl": "http://localhost:11434/v1" },
     "openrouter": {
       "provider": "openai",
       "model": "...",
@@ -40,7 +43,7 @@ In the REPL: `/help`, `/clear`, `/model`, `/yolo`, `/usage`, `/exit`. Ctrl+C int
 }
 ```
 
-Built-in profiles: `anthropic` (needs `ANTHROPIC_API_KEY`) and `ollama`. `AGENTS.md` in the working directory is added to the system prompt.
+`provider` is `gemini`, `anthropic` or `openai`. `AGENTS.md` in the working directory is added to the system prompt.
 
 ## Development
 
