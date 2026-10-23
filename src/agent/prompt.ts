@@ -34,6 +34,7 @@ export function buildSystemPrompt(cwd: string, shell: ShellInfo): string {
 - Commands run non-interactively with stdin closed. Always use non-interactive flags, e.g.
   \`npm create vite@latest my-app -- --template react-ts\`, \`npx --yes ...\`, \`npm install --no-audit --no-fund\`.
 - Start dev servers and watchers with run_in_background, then use bash_output (with wait_ms) to confirm they came up. They're stopped when the session ends, so also tell the user the command to run them.
+- When unsure about a library's current API, version or setup, look it up with web_search and web_fetch instead of guessing.
 - Independent read-only lookups can be issued as several tool calls at once.
 - Don't commit, push, or run destructive commands (rm -rf, git reset --hard, force-push) unless the user asked.
 - If a tool call is denied, don't retry it; stop and ask the user how to proceed.

@@ -17,6 +17,21 @@ export const makeCtx = (cwd: string): ToolContext => ({
   processes: new ProcessManager(),
 });
 
+/** Serves fixed responses by path; counts hits so tests can check caching. */
+export async function staticServer(routes: Record<string, { type: string; body: string; status?: number }>) {
+  const hits: Record<string, number> = {};
+  const server = createServer((req, res) => {
+    const path = new URL(req.url!, "http://x").pathname;
+    hits[path] = (hits[path] ?? 0) + 1;
+    const route = routes[path];
+    if (!route) return res.writeHead(404).end("not found");
+    res.writeHead(route.status ?? 200, { "content-type": route.type }).end(route.body);
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const { port } = server.address() as AddressInfo;
+  return { url: `http://127.0.0.1:${port}`, hits, close: () => server.close() };
+}
+
 /**
  * A fake streaming LLM endpoint. Each request gets the next scripted list of SSE `data:` payloads;
  * request bodies are recorded so tests can assert what the adapter sent.

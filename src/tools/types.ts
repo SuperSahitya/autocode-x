@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { ProcessManager } from "./processes.js";
 import type { ShellInfo } from "./shell.js";
 
-export type ToolKind = "read" | "write" | "exec";
+export type ToolKind = "read" | "write" | "exec" | "network";
 
 export interface ToolContext {
   cwd: string;
@@ -11,6 +11,7 @@ export interface ToolContext {
   /** abs path -> mtimeMs at last read/write */
   fileState: Map<string, number>;
   processes: ProcessManager;
+  searxngUrl?: string;
 }
 
 export interface ToolOutput {

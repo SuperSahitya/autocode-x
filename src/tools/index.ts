@@ -3,6 +3,7 @@ import type { ToolCallPart, ToolSpec } from "../types.js";
 import { bashOutputTool, bashTool, killProcessTool } from "./bash.js";
 import { editFileTool, listDirTool, readFileTool, writeFileTool } from "./fs.js";
 import { globTool, grepTool } from "./search.js";
+import { webFetchTool, webSearchTool } from "./web.js";
 import { ToolError, type Tool, type ToolContext, type ToolOutput } from "./types.js";
 
 export const DEFAULT_TOOLS: Tool[] = [
@@ -15,6 +16,8 @@ export const DEFAULT_TOOLS: Tool[] = [
   bashTool,
   bashOutputTool,
   killProcessTool,
+  webSearchTool,
+  webFetchTool,
 ];
 
 export class ToolRegistry {

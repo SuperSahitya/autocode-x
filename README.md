@@ -45,6 +45,8 @@ Built-in profiles: `gemini`, `anthropic`, `groq`, `ollama`. Add or override them
 
 `provider` is `gemini`, `anthropic` or `openai`. `AGENTS.md` in the working directory is added to the system prompt.
 
+Web search uses DuckDuckGo by default. To use your own SearXNG instance instead, add `"searxngUrl": "http://localhost:8080"` (JSON output must be enabled on the instance).
+
 ## Development
 
 ```

@@ -66,6 +66,7 @@ async function main(): Promise<void> {
     shell,
     maxTokens: current.profile.maxTokens,
     maxSteps: Number(opts.maxSteps),
+    searxngUrl: config.searxngUrl,
   });
   process.on("exit", () => agent.dispose());
 

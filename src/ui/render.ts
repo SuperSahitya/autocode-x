@@ -114,6 +114,14 @@ export class Renderer {
       case "grep":
       case "list_dir":
         return gutter + pc.dim(r.output.startsWith("No ") ? r.output : `${lines.length} result${lines.length === 1 ? "" : "s"}`) + "\n";
+      case "web_search": {
+        const count = lines.filter((l) => /^\d+\. /.test(l)).length;
+        return gutter + pc.dim(count ? `${count} results` : r.output) + "\n";
+      }
+      case "web_fetch": {
+        const title = lines[0]?.startsWith("# ") ? lines[0].slice(2) : "";
+        return gutter + pc.dim(`${oneLine(title, 80)}${title ? " · " : ""}${(r.output.length / 1000).toFixed(1)}k chars`) + "\n";
+      }
       default: {
         const tail = lines.slice(-MAX_OUTPUT_PREVIEW);
         return gutter + pc.dim(tail.map((l) => oneLine(l, 160)).join(`\n${indent}`)) + "\n";

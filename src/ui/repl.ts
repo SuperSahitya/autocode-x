@@ -34,8 +34,8 @@ export class Repl {
 
   readonly askPermission = async (req: PermissionRequest): Promise<Decision> => {
     this.deps.renderer.pause();
-    const always = req.alwaysKey ? `, ${pc.bold("a")}lways${pc.dim(` (${req.alwaysKey.replace(/^bash:/, "")}*)`)}` : "";
-    const verb = req.tool.kind === "exec" ? "Run" : "Allow";
+    const always = req.alwaysKey ? `, ${pc.bold("a")}lways${pc.dim(` (${describeAlways(req.alwaysKey)})`)}` : "";
+    const verb = req.tool.kind === "exec" ? "Run" : req.tool.kind === "network" ? "Fetch with" : "Allow";
     while (true) {
       let answer: string;
       try {
@@ -167,6 +167,12 @@ export class Repl {
         renderer.error(`Unknown command /${cmd}. Try /help.`);
     }
   }
+}
+
+function describeAlways(key: string): string {
+  if (key.startsWith("bash:")) return `${key.slice(5)} *`;
+  if (key.startsWith("web_fetch:")) return `any page on ${key.slice(10)}`;
+  return key;
 }
 
 function diffUsage(after: Usage, before: Usage): Usage {

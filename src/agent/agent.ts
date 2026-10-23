@@ -21,6 +21,7 @@ export interface AgentOptions {
   shell: ShellInfo;
   maxTokens?: number;
   maxSteps?: number;
+  searxngUrl?: string;
 }
 
 interface PreparedCall {
@@ -103,6 +104,7 @@ export class Agent {
       shell: this.opts.shell,
       fileState: this.fileState,
       processes: this.processes,
+      searxngUrl: this.opts.searxngUrl,
     };
     const prepared: PreparedCall[] = calls.map((call) => {
       const parsed = this.opts.tools.parse(call);

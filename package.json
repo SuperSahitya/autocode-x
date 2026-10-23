@@ -20,14 +20,18 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@vscode/ripgrep": "^1.18.0",
     "commander": "^15.0.0",
     "diff": "^9.0.0",
+    "linkedom": "^0.18.14",
     "picocolors": "^1.1.1",
+    "turndown": "^7.2.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/turndown": "^5.0.6",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

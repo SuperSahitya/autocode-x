@@ -23,6 +23,8 @@ const ConfigSchema = z.object({
   profiles: z.record(z.string(), ProfileSchema).default({}),
   /** "bash" | "powershell" | path, auto-detected when unset */
   shell: z.string().optional(),
+  /** SearXNG instance for web_search instead of DuckDuckGo */
+  searxngUrl: z.string().optional(),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 
