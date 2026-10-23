@@ -40,7 +40,7 @@ const BUILTIN_PROFILES: Record<string, Profile> = {
   ollama: { provider: "openai", model: "qwen2.5-coder:14b", baseUrl: "http://localhost:11434/v1" },
 };
 
-export const CONFIG_DIR = join(homedir(), ".autocode");
+export const CONFIG_DIR = process.env.AUTOCODE_HOME ?? join(homedir(), ".autocode");
 
 // Project-level config is not read: a repo shouldn't be able to redirect your API key.
 export function loadConfig(): Config {

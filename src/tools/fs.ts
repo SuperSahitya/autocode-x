@@ -101,11 +101,12 @@ export const writeFileTool = defineTool({
     const existed = await assertFresh(ctx, abs);
     const before = existed ? await readFile(abs, "utf8") : "";
     await writeTracked(ctx, abs, content);
-    const lines = content ? content.replace(/\n$/, "").split("\n").length : 0;
+    const count = content ? content.replace(/\n$/, "").split("\n").length : 0;
+    const lines = `${count} line${count === 1 ? "" : "s"}`;
     const name = displayPath(ctx, abs);
     return existed
-      ? { output: `Overwrote ${name} (${lines} lines).`, display: makeDiff(ctx, abs, before, content) }
-      : { output: `Created ${name} (${lines} lines).`, display: `Created ${name} (${lines} lines)` };
+      ? { output: `Overwrote ${name} (${lines}).`, display: makeDiff(ctx, abs, before, content) }
+      : { output: `Created ${name} (${lines}).`, display: `Created ${name} (${lines})` };
   },
 });
 

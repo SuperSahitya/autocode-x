@@ -1,15 +1,17 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { Agent } from "./agent/agent.js";
 import { Permissions, type Decision, type PermissionRequest } from "./agent/permissions.js";
 import { buildSystemPrompt } from "./agent/prompt.js";
-import { createProvider, loadConfig, resolveModelSpec } from "./config.js";
+import { CONFIG_DIR, createProvider, loadConfig, resolveModelSpec } from "./config.js";
+import { Checkpoints } from "./session/checkpoints.js";
+import { SessionStore, type Session } from "./session/store.js";
 import { ToolRegistry } from "./tools/index.js";
 import { detectShell } from "./tools/shell.js";
 import { Renderer } from "./ui/render.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 interface CliOptions {
   print?: string;
@@ -18,6 +20,8 @@ interface CliOptions {
   cwd?: string;
   maxSteps?: string;
   listProfiles?: boolean;
+  resume?: string | boolean;
+  sessions?: boolean;
 }
 
 async function main(): Promise<void> {
@@ -31,6 +35,8 @@ async function main(): Promise<void> {
     .option("-y, --yolo", "auto-approve file writes and shell commands")
     .option("-C, --cwd <dir>", "working directory")
     .option("--max-steps <n>", "max model round-trips per request", "100")
+    .option("-r, --resume [id]", "resume a saved session (default: the latest in this directory)")
+    .option("--sessions", "list saved sessions for this directory and exit")
     .option("--list-profiles", "list configured profiles and exit")
     .parse();
   const opts = program.opts<CliOptions>();
@@ -45,7 +51,24 @@ async function main(): Promise<void> {
   }
 
   const cwd = resolve(opts.cwd ?? process.cwd());
-  let current = resolveModelSpec(config, opts.model);
+  const store = new SessionStore(join(CONFIG_DIR, "sessions"));
+  if (opts.sessions) {
+    const sessions = store.list(cwd);
+    if (!sessions.length) console.log("No saved sessions for this directory.");
+    for (const s of sessions) console.log(`${pc.bold(s.id)}  ${pc.dim(new Date(s.updatedAt).toLocaleString())}  ${s.title}`);
+    return;
+  }
+
+  let resumed: Session | undefined;
+  if (opts.resume) {
+    const id = typeof opts.resume === "string" ? opts.resume : undefined;
+    resumed = store.load(cwd, id);
+    if (!resumed) throw new Error(id ? `No session "${id}". Run autocode --sessions to list them.` : "No saved session for this directory.");
+  }
+  // a resumed session keeps its model unless -m says otherwise
+  const sessionModel = resumed && config.profiles[resumed.profile] ? `${resumed.profile}:${resumed.model}` : undefined;
+  let current = resolveModelSpec(config, opts.model ?? sessionModel);
+  const session = resumed ?? store.create(cwd, current.name, current.profile.model);
   const shell = detectShell(config.shell);
   const headless = opts.print !== undefined;
 
@@ -66,8 +89,16 @@ async function main(): Promise<void> {
     maxTokens: current.profile.maxTokens,
     maxSteps: Number(opts.maxSteps),
     searxngUrl: config.searxngUrl,
+    checkpoints: new Checkpoints(cwd, join(CONFIG_DIR, "checkpoints")),
+    onTurnEnd: () => {
+      Object.assign(session, agent.state(), { profile: current.name, model: current.profile.model });
+      store.save(session);
+    },
   });
+  if (resumed) agent.load(resumed);
   process.on("exit", () => agent.dispose());
+  const resumeHint = () =>
+    session.messages.length ? pc.dim(`Resume this session with: autocode --resume ${session.id}`) : "";
 
   if (headless) {
     const ac = new AbortController();
@@ -77,6 +108,7 @@ async function main(): Promise<void> {
       await agent.run(opts.print!, renderer.events, ac.signal);
     } finally {
       renderer.endTurn();
+      if (resumeHint()) process.stderr.write(resumeHint() + "\n");
     }
     return;
   }
@@ -112,6 +144,7 @@ async function main(): Promise<void> {
     { exitOnCtrlC: false },
   );
   await app.waitUntilExit();
+  if (resumeHint()) console.log(resumeHint());
   process.exit(0);
 }
 

@@ -3,6 +3,7 @@ import pc from "picocolors";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Agent, AgentEvents } from "../agent/agent.js";
 import type { Decision, PermissionRequest, Permissions } from "../agent/permissions.js";
+import type { Message, ToolResultPart } from "../types.js";
 import { formatLiveOutput, formatTokens, formatToolHeader, formatToolResult, oneLine } from "./format.js";
 import { InputBox } from "./input.js";
 import { renderMarkdown } from "./markdown.js";
@@ -34,9 +35,10 @@ interface LiveTool {
   output: string;
 }
 
-const COMMANDS = ["/help", "/clear", "/model", "/models", "/ps", "/yolo", "/usage", "/exit"];
+const COMMANDS = ["/help", "/undo", "/clear", "/model", "/models", "/ps", "/yolo", "/usage", "/exit"];
 
 const HELP = `Commands
+  /undo           revert the files changed by the last turn and drop it from the conversation
   /model [spec]   show or switch: <model>, <profile> or <profile>:<model>
   /models         list models from the current provider
   /ps             list background processes
@@ -49,6 +51,32 @@ Keys
   esc or ctrl+c interrupts the agent · ctrl+c twice quits`;
 
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+const INPUT_KEYS = ["path", "command", "url", "query", "pattern", "id"];
+
+/** Rebuild the scrollback for a resumed session from its messages. */
+export function transcriptEntries(messages: Message[]): EntryData[] {
+  const results = new Map<string, ToolResultPart>();
+  for (const m of messages) for (const p of m.content) if (p.type === "tool_result") results.set(p.id, p);
+
+  const out: EntryData[] = [];
+  for (const m of messages) {
+    for (const p of m.content) {
+      if (p.type === "text" && p.text.trim()) out.push({ kind: m.role === "user" ? "user" : "assistant", text: p.text });
+      if (p.type === "tool_call") {
+        const input = (p.input ?? {}) as Record<string, unknown>;
+        const key = INPUT_KEYS.find((k) => typeof input[k] === "string");
+        const r = results.get(p.id);
+        out.push({
+          kind: "tool",
+          header: formatToolHeader(p, key ? String(input[key]) : ""),
+          result: r ? formatToolResult(p, { output: r.content, isError: r.isError }) : "",
+        });
+      }
+    }
+  }
+  return out;
+}
 
 /** Split off the paragraphs that are complete (not inside an open code fence) so they can move to scrollback. */
 export function splitCompleted(text: string): [done: string, rest: string] {
@@ -64,7 +92,13 @@ export function splitCompleted(text: string): [done: string, rest: string] {
 export function App({ agent, permissions, bridge, banner, modelLabel, switchModel, initialPrompt }: AppProps) {
   const { exit } = useApp();
   const nextId = useRef(0);
-  const [entries, setEntries] = useState<Entry[]>(() => [{ id: nextId.current++, kind: "banner", text: banner }]);
+  const [entries, setEntries] = useState<Entry[]>(() => {
+    const initial: EntryData[] = [{ kind: "banner", text: banner }];
+    if (agent.messages.length) {
+      initial.push(...transcriptEntries(agent.messages), { kind: "info", text: "Resumed session. /undo still works for its turns." });
+    }
+    return initial.map((e) => ({ ...e, id: nextId.current++ }));
+  });
   const [running, setRunning] = useState(false);
   const [pending, setPending] = useState<{ req: PermissionRequest; resolve(d: Decision): void }>();
   const [history, setHistory] = useState<string[]>([]);
@@ -144,6 +178,7 @@ export function App({ agent, permissions, bridge, banner, modelLabel, switchMode
         if (tool) tool.output = (tool.output + chunk).slice(-20_000);
         schedule();
       },
+      onNotice: (message) => push({ kind: "info", text: pc.yellow(message) }),
       onToolEnd: (call, result) => {
         const header = live.current.get(call.id)?.header ?? formatToolHeader(call, "");
         live.current.delete(call.id);
@@ -173,6 +208,19 @@ export function App({ agent, permissions, bridge, banner, modelLabel, switchMode
     switch (cmd) {
       case "/help":
         return info(HELP);
+      case "/undo": {
+        if (running) return info("Wait for the current turn to finish, or press esc first.");
+        try {
+          const r = await agent.undo();
+          if (!r) return info("Nothing to undo.");
+          const files = r.files.length
+            ? `Restored ${r.files.length} file${r.files.length === 1 ? "" : "s"}: ${r.files.slice(0, 8).join(", ")}${r.files.length > 8 ? ", ..." : ""}`
+            : "No files had changed.";
+          return info(`Undid "${oneLine(r.checkpoint.label, 60)}". ${files}`);
+        } catch (err) {
+          return push({ kind: "error", text: `Undo failed: ${(err as Error).message}` });
+        }
+      }
       case "/clear":
         agent.clear();
         return info("Conversation cleared.");

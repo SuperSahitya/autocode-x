@@ -54,6 +54,11 @@ export class Renderer {
       this.log.write(formatToolResult(call, result) + "\n");
       this.spinner.start("Thinking");
     },
+    onNotice: (message) => {
+      this.spinner.stop();
+      this.newline();
+      this.log.write(pc.yellow(`! ${message}\n`));
+    },
   };
 
   startTurn(): void {

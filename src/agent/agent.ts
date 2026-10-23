@@ -2,6 +2,7 @@ import type { ToolRegistry } from "../tools/index.js";
 import { ProcessManager } from "../tools/processes.js";
 import type { ShellInfo } from "../tools/shell.js";
 import type { Tool, ToolContext, ToolOutput } from "../tools/types.js";
+import type { Checkpoint, Checkpoints } from "../session/checkpoints.js";
 import type { Message, Provider, StopReason, TextPart, ToolCallPart, ToolResultPart, Usage } from "../types.js";
 import type { Permissions } from "./permissions.js";
 
@@ -11,6 +12,8 @@ export interface AgentEvents {
   onToolOutput?(call: ToolCallPart, chunk: string): void;
   onToolEnd?(call: ToolCallPart, result: ToolOutput): void;
   onStepEnd?(usage: Usage, stopReason: StopReason): void;
+  /** non-fatal problems worth showing, e.g. checkpoints being unavailable */
+  onNotice?(message: string): void;
 }
 
 export interface AgentOptions {
@@ -23,6 +26,22 @@ export interface AgentOptions {
   maxTokens?: number;
   maxSteps?: number;
   searxngUrl?: string;
+  checkpoints?: Checkpoints;
+  /** called after every run, e.g. to save the session */
+  onTurnEnd?(): void;
+}
+
+export interface AgentState {
+  messages: Message[];
+  usage: Usage;
+  checkpoints: Checkpoint[];
+}
+
+interface TurnState {
+  label: string;
+  messageCount: number;
+  lastPartCount?: number;
+  checkpointed: boolean;
 }
 
 interface PreparedCall {
@@ -38,7 +57,10 @@ export class Agent {
   readonly totalUsage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
   provider: Provider;
   readonly processes = new ProcessManager();
+  readonly checkpoints: Checkpoint[] = [];
   private readonly fileState = new Map<string, number>();
+  private turn?: TurnState;
+  private checkpointNoticeShown = false;
 
   constructor(private readonly opts: AgentOptions) {
     this.provider = opts.provider;
@@ -50,10 +72,54 @@ export class Agent {
 
   clear(): void {
     this.messages.length = 0;
+    this.checkpoints.length = 0;
     this.fileState.clear();
   }
 
+  state(): AgentState {
+    return { messages: this.messages, usage: this.totalUsage, checkpoints: this.checkpoints };
+  }
+
+  load(state: AgentState): void {
+    this.messages.splice(0, this.messages.length, ...state.messages);
+    this.checkpoints.splice(0, this.checkpoints.length, ...state.checkpoints);
+    Object.assign(this.totalUsage, state.usage);
+  }
+
+  /**
+   * Restore files to the most recent checkpoint and drop the turn that followed it from the conversation.
+   * Returns undefined when there is nothing to undo.
+   */
+  async undo(): Promise<{ checkpoint: Checkpoint; files: string[] } | undefined> {
+    const checkpoint = this.checkpoints.pop();
+    if (!checkpoint || !this.opts.checkpoints) return undefined;
+    const files = await this.opts.checkpoints.restore(checkpoint.commit);
+    this.messages.length = checkpoint.messageCount;
+    const last = this.messages.at(-1);
+    if (checkpoint.lastPartCount !== undefined && last?.role === "user") last.content.length = checkpoint.lastPartCount;
+    // files changed under the agent; make it read them again before editing
+    this.fileState.clear();
+    this.opts.onTurnEnd?.();
+    return { checkpoint, files };
+  }
+
   async run(userText: string, events: AgentEvents = {}, signal = new AbortController().signal): Promise<void> {
+    const last = this.messages.at(-1);
+    this.turn = {
+      label: userText,
+      messageCount: this.messages.length,
+      lastPartCount: last?.role === "user" ? last.content.length : undefined,
+      checkpointed: false,
+    };
+    try {
+      await this.loop(userText, events, signal);
+    } finally {
+      this.turn = undefined;
+      this.opts.onTurnEnd?.();
+    }
+  }
+
+  private async loop(userText: string, events: AgentEvents, signal: AbortSignal): Promise<void> {
     this.pushUser([{ type: "text", text: userText }]);
     const maxSteps = this.opts.maxSteps ?? 100;
 
@@ -127,6 +193,7 @@ export class Agent {
         stop = true;
         return finish(p, { output: "The user denied this tool call. Stop and wait for their instructions.", isError: true });
       }
+      if (p.tool!.kind === "write" || p.tool!.kind === "exec") await this.ensureCheckpoint(events);
       const onOutput = events.onToolOutput && ((chunk: string) => events.onToolOutput!(p.call, chunk));
       finish(p, await this.opts.tools.execute(p.tool!, p.input, { ...ctx, onOutput }));
     };
@@ -140,6 +207,31 @@ export class Agent {
       return { type: "tool_result", id: c.id, content: r.output, isError: r.isError };
     });
     return { parts, stop };
+  }
+
+  // one snapshot per turn, taken just before its first change, so read-only turns cost nothing
+  private async ensureCheckpoint(events: AgentEvents): Promise<void> {
+    const store = this.opts.checkpoints;
+    const turn = this.turn;
+    if (!store || !turn || turn.checkpointed) return;
+    turn.checkpointed = true;
+    try {
+      const commit = await store.create(turn.label);
+      if (commit) {
+        this.checkpoints.push({
+          commit,
+          label: turn.label,
+          createdAt: Date.now(),
+          messageCount: turn.messageCount,
+          lastPartCount: turn.lastPartCount,
+        });
+        return;
+      }
+      if (!this.checkpointNoticeShown && store.disabledReason) events.onNotice?.(`Undo unavailable: ${store.disabledReason}.`);
+    } catch (err) {
+      if (!this.checkpointNoticeShown) events.onNotice?.(`Couldn't save a checkpoint: ${(err as Error).message}`);
+    }
+    this.checkpointNoticeShown = true;
   }
 
   // merge into a trailing user turn so roles keep alternating

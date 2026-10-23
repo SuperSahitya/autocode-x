@@ -20,10 +20,14 @@ autocode "add a dark mode toggle"     # interactive, starting with a message
 autocode -m gemini                    # pick a profile
 autocode -m gemini:gemini-3.6-flash   # profile and model
 autocode -p "fix the build" -y        # one-shot, auto-approve
+autocode --resume                     # continue the last session in this directory
+autocode --sessions                   # list saved sessions
 autocode --list-profiles
 ```
 
-Commands: `/model`, `/models`, `/ps`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`. Esc or Ctrl+C interrupts the agent; end a line with `\` for a new line.
+Commands: `/undo`, `/model`, `/models`, `/ps`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`. Esc or Ctrl+C interrupts the agent; end a line with `\` for a new line.
+
+`/undo` restores files to before the last turn that changed them. Snapshots live in a separate git repo under `~/.autocode/checkpoints`, so your own repo is never touched. Sessions are saved to `~/.autocode/sessions`.
 
 ## Config
 

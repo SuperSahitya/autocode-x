@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { render } from "ink-testing-library";
 import { Agent } from "../src/agent/agent.js";
 import { Permissions } from "../src/agent/permissions.js";
+import { join } from "node:path";
+import { Checkpoints } from "../src/session/checkpoints.js";
 import { ToolRegistry } from "../src/tools/index.js";
 import { detectShell } from "../src/tools/shell.js";
 import type { StreamEvent } from "../src/types.js";
@@ -22,6 +24,7 @@ async function waitFor(check: () => boolean, what: string, timeout = 5000) {
 }
 
 function setup(steps: ConstructorParameters<typeof ScriptedProvider>[0], mode: "ask" | "auto" = "auto") {
+  const cwd = tempDir();
   const bridge = new PermissionBridge();
   const permissions = new Permissions(mode, (req) => bridge.ask(req));
   const agent = new Agent({
@@ -29,8 +32,9 @@ function setup(steps: ConstructorParameters<typeof ScriptedProvider>[0], mode: "
     tools: new ToolRegistry(),
     permissions,
     system: "test",
-    cwd: tempDir(),
+    cwd,
     shell: detectShell(),
+    checkpoints: new Checkpoints(cwd, join(tempDir(), "checkpoints")),
   });
   const ui = render(
     <App
@@ -140,6 +144,59 @@ test("slash commands and input editing", async () => {
     await type("l");
     await type("\u007f\u007f"); // backspace twice
     assert.match(stripAnsi(ui.lastFrame()!), /❯ heo/);
+  } finally {
+    ui.unmount();
+  }
+});
+
+test("/undo reverts the last turn's files", async () => {
+  const { ui, agent, screen, type } = setup([toolStep("write_file", { path: "made.txt", content: "x\n" }), textStep("Made it.")]);
+  try {
+    await type("make a file");
+    await type("\r");
+    await waitFor(() => screen().includes("Made it."), "turn to finish");
+    await type("/undo");
+    await type("\r");
+    await waitFor(() => screen().includes("Undid"), "undo message");
+    assert.match(screen(), /Undid "make a file"\. Restored 1 file: made\.txt/);
+    assert.equal(agent.messages.length, 0);
+  } finally {
+    ui.unmount();
+  }
+});
+
+test("a resumed session replays its transcript", async () => {
+  const bridge = new PermissionBridge();
+  const permissions = new Permissions("auto", (req) => bridge.ask(req));
+  const agent = new Agent({
+    provider: new ScriptedProvider([]),
+    tools: new ToolRegistry(),
+    permissions,
+    system: "test",
+    cwd: tempDir(),
+    shell: detectShell(),
+  });
+  agent.load({
+    messages: [
+      { role: "user", content: [{ type: "text", text: "earlier question" }] },
+      { role: "assistant", content: [{ type: "text", text: "Looking." }, { type: "tool_call", id: "c1", name: "read_file", input: { path: "src/app.ts" } }] },
+      { role: "user", content: [{ type: "tool_result", id: "c1", content: "1\tconst a = 1;" }] },
+      { role: "assistant", content: [{ type: "text", text: "It defines **a**." }] },
+    ],
+    usage: { inputTokens: 1200, outputTokens: 300 },
+    checkpoints: [],
+  });
+  const ui = render(
+    <App agent={agent} permissions={permissions} bridge={bridge} banner="b" modelLabel={() => "m"} switchModel={(s) => s} />,
+  );
+  try {
+    await sleep(100);
+    const out = stripAnsi(ui.frames.join("\n"));
+    assert.match(out, /❯ earlier question/);
+    assert.match(out, /● read_file\(src\/app\.ts\)\n\s+⎿ Read 1 line/);
+    assert.match(out, /It defines a\./);
+    assert.match(out, /Resumed session/);
+    assert.match(out, /↑1\.2k ↓300/);
   } finally {
     ui.unmount();
   }
