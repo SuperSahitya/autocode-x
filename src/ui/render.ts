@@ -1,10 +1,7 @@
 import pc from "picocolors";
 import type { AgentEvents } from "../agent/agent.js";
-import type { ToolOutput } from "../tools/types.js";
-import type { ToolCallPart, Usage } from "../types.js";
-
-const MAX_DIFF_LINES = 40;
-const MAX_OUTPUT_PREVIEW = 6;
+import type { Usage } from "../types.js";
+import { formatToolHeader, formatToolResult, formatUsage } from "./format.js";
 
 class Spinner {
   private timer?: NodeJS.Timeout;
@@ -30,16 +27,14 @@ class Spinner {
   }
 }
 
-export const formatTokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
-
-// In headless mode text goes to stdout and tool activity to stderr.
+// Plain streaming output for headless mode: text to stdout, tool activity to stderr.
 export class Renderer {
   private atLineStart = true;
   private readonly spinner: Spinner;
 
   constructor(
     private readonly out: NodeJS.WriteStream = process.stdout,
-    private readonly log: NodeJS.WriteStream = process.stdout,
+    private readonly log: NodeJS.WriteStream = process.stderr,
   ) {
     this.spinner = new Spinner(log);
   }
@@ -53,10 +48,10 @@ export class Renderer {
     onToolStart: (call, summary) => {
       this.spinner.stop();
       this.newline();
-      this.log.write(`${pc.cyan("●")} ${pc.bold(call.name)}${summary ? pc.dim(`(${oneLine(summary, 100)})`) : ""}\n`);
+      this.log.write(formatToolHeader(call, summary) + "\n");
     },
     onToolEnd: (call, result) => {
-      this.log.write(this.formatResult(call, result));
+      this.log.write(formatToolResult(call, result) + "\n");
       this.spinner.start("Thinking");
     },
   };
@@ -68,15 +63,7 @@ export class Renderer {
   endTurn(usage?: Usage): void {
     this.spinner.stop();
     this.newline();
-    if (usage) {
-      const cached = usage.cacheReadTokens ? `, ${formatTokens(usage.cacheReadTokens)} cached` : "";
-      this.log.write(pc.dim(`↑ ${formatTokens(usage.inputTokens)} ↓ ${formatTokens(usage.outputTokens)} tokens${cached}\n`));
-    }
-  }
-
-  pause(): void {
-    this.spinner.stop();
-    this.newline();
+    if (usage) this.log.write(formatUsage(usage) + "\n");
   }
 
   error(message: string): void {
@@ -85,68 +72,8 @@ export class Renderer {
     this.log.write(pc.red(`✖ ${message}\n`));
   }
 
-  info(message: string): void {
-    this.newline();
-    this.log.write(pc.dim(`${message}\n`));
-  }
-
   private newline(): void {
     if (!this.atLineStart) this.out.write("\n");
     this.atLineStart = true;
   }
-
-  private formatResult(call: ToolCallPart, r: ToolOutput): string {
-    const gutter = pc.dim("  ⎿ ");
-    const indent = "    ";
-    if (r.isError) {
-      const lines = r.output.trim().split("\n");
-      return gutter + pc.red(lines.slice(0, MAX_OUTPUT_PREVIEW).join(`\n${indent}`)) + more(lines.length - MAX_OUTPUT_PREVIEW) + "\n";
-    }
-    if (r.display) {
-      if (!r.display.includes("\n@@")) return gutter + pc.dim(r.display) + "\n";
-      return colorDiff(r.display).map((l) => indent + l).join("\n") + "\n";
-    }
-    const lines = r.output.trimEnd().split("\n");
-    switch (call.name) {
-      case "read_file":
-        return gutter + pc.dim(`Read ${lines.filter((l) => /^\s*\d+\t/.test(l)).length} lines`) + "\n";
-      case "glob":
-      case "grep":
-      case "list_dir":
-        return gutter + pc.dim(r.output.startsWith("No ") ? r.output : `${lines.length} result${lines.length === 1 ? "" : "s"}`) + "\n";
-      case "web_search": {
-        const count = lines.filter((l) => /^\d+\. /.test(l)).length;
-        return gutter + pc.dim(count ? `${count} results` : r.output) + "\n";
-      }
-      case "web_fetch": {
-        const title = lines[0]?.startsWith("# ") ? lines[0].slice(2) : "";
-        return gutter + pc.dim(`${oneLine(title, 80)}${title ? " · " : ""}${(r.output.length / 1000).toFixed(1)}k chars`) + "\n";
-      }
-      default: {
-        const tail = lines.slice(-MAX_OUTPUT_PREVIEW);
-        return gutter + pc.dim(tail.map((l) => oneLine(l, 160)).join(`\n${indent}`)) + "\n";
-      }
-    }
-  }
 }
-
-function colorDiff(diff: string): string[] {
-  const lines = diff
-    .trimEnd()
-    .split("\n")
-    .filter((l) => !l.startsWith("---") && !l.startsWith("+++") && l !== "\\ No newline at end of file");
-  const shown = lines.slice(0, MAX_DIFF_LINES).map((l) => {
-    if (l.startsWith("+")) return pc.green(l);
-    if (l.startsWith("-")) return pc.red(l);
-    if (l.startsWith("@@")) return pc.cyan(l);
-    return pc.dim(l);
-  });
-  if (lines.length > MAX_DIFF_LINES) shown.push(pc.dim(`... ${lines.length - MAX_DIFF_LINES} more diff lines`));
-  return shown;
-}
-
-const more = (n: number) => (n > 0 ? pc.dim(`\n    ... ${n} more lines`) : "");
-const oneLine = (s: string, max: number) => {
-  const flat = s.replace(/\s*\n\s*/g, " ⏎ ");
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
-};

@@ -83,7 +83,7 @@ export async function htmlToMarkdown(html: string, url: string): Promise<{ title
   });
   td.addRule("images", { filter: "img", replacement: () => "" });
 
-  const markdown = td.turndown(content).replace(/\n{3,}/g, "\n\n").trim();
+  const markdown = td.turndown(content ?? "").replace(/\n{3,}/g, "\n\n").trim();
   return { title, markdown };
 }
 

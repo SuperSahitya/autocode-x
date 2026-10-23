@@ -13,6 +13,7 @@ export interface RunOptions {
   signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;
   maxBytes?: number;
+  onData?: (text: string) => void;
 }
 
 export function runProcess(command: string, args: string[], opts: RunOptions): Promise<RunResult> {
@@ -33,6 +34,7 @@ export function runProcess(command: string, args: string[], opts: RunOptions): P
     const collect = (b: Buffer) => {
       if (bytes < maxBytes) chunks.push(b);
       bytes += b.length;
+      opts.onData?.(b.toString("utf8"));
     };
     child.stdout!.on("data", collect);
     child.stderr!.on("data", collect);

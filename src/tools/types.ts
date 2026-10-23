@@ -12,6 +12,8 @@ export interface ToolContext {
   fileState: Map<string, number>;
   processes: ProcessManager;
   searxngUrl?: string;
+  /** streams a running command's output to the UI */
+  onOutput?: (chunk: string) => void;
 }
 
 export interface ToolOutput {

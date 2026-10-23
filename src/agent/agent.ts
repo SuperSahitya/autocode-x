@@ -8,6 +8,7 @@ import type { Permissions } from "./permissions.js";
 export interface AgentEvents {
   onText?(delta: string): void;
   onToolStart?(call: ToolCallPart, summary: string): void;
+  onToolOutput?(call: ToolCallPart, chunk: string): void;
   onToolEnd?(call: ToolCallPart, result: ToolOutput): void;
   onStepEnd?(usage: Usage, stopReason: StopReason): void;
 }
@@ -126,7 +127,8 @@ export class Agent {
         stop = true;
         return finish(p, { output: "The user denied this tool call. Stop and wait for their instructions.", isError: true });
       }
-      finish(p, await this.opts.tools.execute(p.tool!, p.input, ctx));
+      const onOutput = events.onToolOutput && ((chunk: string) => events.onToolOutput!(p.call, chunk));
+      finish(p, await this.opts.tools.execute(p.tool!, p.input, { ...ctx, onOutput }));
     };
 
     // read-only calls can't conflict, so run them concurrently

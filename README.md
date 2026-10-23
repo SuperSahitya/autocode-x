@@ -16,13 +16,14 @@ Set the key for the provider you use: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY` or `
 
 ```
 autocode                              # interactive
+autocode "add a dark mode toggle"     # interactive, starting with a message
 autocode -m gemini                    # pick a profile
 autocode -m gemini:gemini-3.6-flash   # profile and model
 autocode -p "fix the build" -y        # one-shot, auto-approve
 autocode --list-profiles
 ```
 
-In the REPL: `/model`, `/models`, `/ps`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`. Ctrl+C interrupts the agent.
+Commands: `/model`, `/models`, `/ps`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`. Esc or Ctrl+C interrupts the agent; end a line with `\` for a new line.
 
 ## Config
 

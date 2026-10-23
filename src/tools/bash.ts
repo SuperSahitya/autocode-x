@@ -67,6 +67,7 @@ export const bashTool = defineTool({
       signal: ctx.signal,
       timeoutMs: timeout_ms,
       env: commandEnv(),
+      onData: ctx.onOutput && ((text) => ctx.onOutput!(stripAnsi(text))),
     });
     let output = truncateMiddle(stripAnsi(res.output).trimEnd(), MAX_OUTPUT_CHARS);
     if (res.timedOut) output += `\n[Timed out after ${timeout_ms / 1000}s and was killed]`;

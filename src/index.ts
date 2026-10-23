@@ -8,9 +8,8 @@ import { createProvider, loadConfig, resolveModelSpec } from "./config.js";
 import { ToolRegistry } from "./tools/index.js";
 import { detectShell } from "./tools/shell.js";
 import { Renderer } from "./ui/render.js";
-import { Repl } from "./ui/repl.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 interface CliOptions {
   print?: string;
@@ -26,6 +25,7 @@ async function main(): Promise<void> {
     .name("autocode")
     .description("A minimal, fast, multi-provider coding agent")
     .version(VERSION)
+    .argument("[prompt...]", "start the session with this message")
     .option("-p, --print <prompt>", "run one prompt non-interactively, print the answer, and exit")
     .option("-m, --model <spec>", "profile, profile:model, or a model id for the default profile")
     .option("-y, --yolo", "auto-approve file writes and shell commands")
@@ -34,6 +34,7 @@ async function main(): Promise<void> {
     .option("--list-profiles", "list configured profiles and exit")
     .parse();
   const opts = program.opts<CliOptions>();
+  const initialPrompt = program.args.join(" ").trim() || undefined;
 
   const config = loadConfig();
   if (opts.listProfiles) {
@@ -48,14 +49,12 @@ async function main(): Promise<void> {
   const shell = detectShell(config.shell);
   const headless = opts.print !== undefined;
 
-  const renderer = headless ? new Renderer(process.stdout, process.stderr) : new Renderer();
-  let repl: Repl | undefined;
-  const prompt = (req: PermissionRequest): Promise<Decision> => {
-    if (repl) return repl.askPermission(req);
+  let ask: (req: PermissionRequest) => Promise<Decision> = (req) => {
     renderer.error(`Denied ${req.tool.name} (non-interactive mode; pass --yolo to allow writes and commands).`);
     return Promise.resolve("deny");
   };
-  const permissions = new Permissions(opts.yolo ? "auto" : "ask", prompt);
+  const permissions = new Permissions(opts.yolo ? "auto" : "ask", (req) => ask(req));
+  const renderer = new Renderer();
 
   const agent = new Agent({
     provider: createProvider(current.profile),
@@ -82,23 +81,38 @@ async function main(): Promise<void> {
     return;
   }
 
-  const modelLabel = () => `${current.name} ${pc.dim("·")} ${current.profile.model}`;
-  repl = new Repl({
-    agent,
-    permissions,
-    renderer,
-    modelLabel,
-    switchModel: (spec) => {
-      const next = resolveModelSpec(config, spec, current.name);
-      agent.provider = createProvider(next.profile);
-      current = next;
-      return modelLabel();
-    },
-  });
+  // loaded only for interactive sessions, so -p stays fast
+  const [{ render }, { createElement }, { App, PermissionBridge }] = await Promise.all([
+    import("ink"),
+    import("react"),
+    import("./ui/app.js"),
+  ]);
+  const bridge = new PermissionBridge();
+  ask = bridge.ask;
+
+  const modelLabel = () => `${current.name} · ${current.profile.model}`;
   const banner =
-    `${pc.bold(pc.cyan("autocode"))} ${pc.dim(`v${VERSION}`)}  ${modelLabel()} ${pc.dim("·")} ${pc.dim(cwd)}` +
-    (opts.yolo ? `  ${pc.yellow("[yolo]")}` : "");
-  await repl.start(banner);
+    `${pc.bold(pc.cyan("autocode"))} ${pc.dim(`v${VERSION}`)}  ${modelLabel()} ${pc.dim("·")} ${pc.dim(cwd)}\n` +
+    pc.dim("/help for commands · esc to interrupt");
+  const app = render(
+    createElement(App, {
+      agent,
+      permissions,
+      bridge,
+      banner,
+      initialPrompt,
+      modelLabel,
+      switchModel: (spec: string) => {
+        const next = resolveModelSpec(config, spec, current.name);
+        agent.provider = createProvider(next.profile);
+        current = next;
+        return modelLabel();
+      },
+    }),
+    { exitOnCtrlC: false },
+  );
+  await app.waitUntilExit();
+  process.exit(0);
 }
 
 main().catch((err: Error) => {
