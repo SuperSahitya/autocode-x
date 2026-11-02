@@ -45,6 +45,7 @@ function setup(steps: ConstructorParameters<typeof ScriptedProvider>[0], mode: "
       banner="autocode test"
       modelLabel={() => "scripted · scripted-1"}
       switchModel={(s) => s}
+      mcpStatus={() => "fixture: 2 tools (echo, fail)"}
     />,
   );
   // everything written so far, static scrollback included
@@ -224,6 +225,18 @@ test("/compact summarizes older messages and /usage reports requests and context
     await type("\r");
     await waitFor(() => screen().includes("3 requests"), "usage");
     assert.match(screen(), /Context: ~\d+ of 100000 tokens/);
+  } finally {
+    ui.unmount();
+  }
+});
+
+test("/mcp lists servers without calling the model", async () => {
+  const { ui, agent, screen, type } = setup([]);
+  try {
+    await type("/mcp");
+    await type("\r");
+    await waitFor(() => screen().includes("fixture: 2 tools (echo, fail)"), "mcp status");
+    assert.equal(agent.messages.length, 0);
   } finally {
     ui.unmount();
   }
