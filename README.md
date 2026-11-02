@@ -25,9 +25,11 @@ autocode --sessions                   # list saved sessions
 autocode --list-profiles
 ```
 
-Commands: `/undo`, `/model`, `/models`, `/ps`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`. Esc or Ctrl+C interrupts the agent; end a line with `\` for a new line.
+Commands: `/undo`, `/compact`, `/model`, `/models`, `/ps`, `/mcp`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`. Esc or Ctrl+C interrupts the agent; end a line with `\` for a new line.
 
 `/undo` restores files to before the last turn that changed them. Snapshots live in a separate git repo under `~/.autocode/checkpoints`, so your own repo is never touched. Sessions are saved to `~/.autocode/sessions`.
+
+Old tool output is trimmed at 50% of the context limit and the conversation is summarized at 80%. A map of the code, built with tree-sitter and ranked with PageRank, is added to the system prompt (TypeScript, JavaScript, Python, Go, Rust, Java).
 
 ## Config
 
@@ -49,6 +51,21 @@ Built-in profiles: `gemini`, `anthropic`, `groq`, `ollama`. Add or override them
 ```
 
 `provider` is `gemini`, `anthropic` or `openai`. `AGENTS.md` in the working directory is added to the system prompt.
+
+Profiles also take `requestsPerMinute`, to wait rather than hit a known rate limit, and `contextLimit` in tokens. Rate limits and dropped streams are retried on their own. `"repoMap": false` turns off the code map.
+
+MCP servers over stdio go at the top level of the config, with an optional `env`. Their tools ask for permission like shell commands do:
+
+```json
+{
+  "mcpServers": {
+    "files": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+    }
+  }
+}
+```
 
 Web search uses DuckDuckGo by default. To use your own SearXNG instance instead, add `"searxngUrl": "http://localhost:8080"` (JSON output must be enabled on the instance).
 
