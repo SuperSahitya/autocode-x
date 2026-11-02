@@ -34,6 +34,8 @@ export interface Usage {
   outputTokens: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** model requests sent, retries included */
+  requests?: number;
 }
 
 export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "error" | "other";
@@ -50,6 +52,10 @@ export interface ChatRequest {
   tools: ToolSpec[];
   maxTokens: number;
   signal?: AbortSignal;
+  /** told about each resend, so a pause doesn't look like a hang */
+  onRetry?(message: string): void;
+  /** told when a request is held back before it's sent */
+  onWait?(message: string): void;
 }
 
 export interface Provider {

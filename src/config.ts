@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AnthropicProvider } from "./providers/anthropic.js";
 import { GeminiProvider } from "./providers/gemini.js";
 import { OpenAIProvider } from "./providers/openai.js";
+import { PacedProvider } from "./providers/pace.js";
 import type { Provider } from "./types.js";
 
 const ProfileSchema = z.object({
@@ -15,6 +16,8 @@ const ProfileSchema = z.object({
   apiKeyEnv: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   maxTokens: z.number().int().positive().optional(),
+  /** waits instead of exceeding this, for APIs with a known rate limit */
+  requestsPerMinute: z.number().int().positive().optional(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 
@@ -91,6 +94,11 @@ export function resolveModelSpec(config: Config, spec: string | undefined, curre
 }
 
 export function createProvider(profile: Profile): Provider {
+  const provider = createAdapter(profile);
+  return profile.requestsPerMinute ? new PacedProvider(provider, profile.requestsPerMinute) : provider;
+}
+
+function createAdapter(profile: Profile): Provider {
   const apiKey = profile.apiKey ?? (profile.apiKeyEnv ? process.env[profile.apiKeyEnv] : undefined);
   if (!apiKey && profile.apiKeyEnv) {
     throw new Error(`No API key: set ${profile.apiKeyEnv} or add apiKey to the profile.`);

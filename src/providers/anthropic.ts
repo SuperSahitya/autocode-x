@@ -38,7 +38,7 @@ export class AnthropicProvider implements Provider {
       tools: req.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })),
       messages: toAnthropicMessages(req.messages),
     };
-    const res = await postWithRetry(`${this.baseUrl}/v1/messages`, this.headers(), body, req.signal);
+    const res = await postWithRetry(`${this.baseUrl}/v1/messages`, this.headers(), body, req);
 
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     let stopReason: StopReason = "other";
@@ -82,7 +82,11 @@ export class AnthropicProvider implements Provider {
           break;
         }
         case "error":
-          throw new ProviderError(`Anthropic stream error: ${ev.error?.message ?? msg.data}`);
+          throw new ProviderError(
+            `Anthropic stream error: ${ev.error?.message ?? msg.data}`,
+            undefined,
+            ["overloaded_error", "api_error", "rate_limit_error"].includes(ev.error?.type),
+          );
       }
     }
     yield { type: "done", stopReason, usage };

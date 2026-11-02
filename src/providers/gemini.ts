@@ -51,7 +51,7 @@ export class GeminiProvider implements Provider {
       `${this.baseUrl}/v1beta/models/${this.model}:streamGenerateContent?alt=sse`,
       { "x-goog-api-key": this.apiKey },
       body,
-      req.signal,
+      req,
     );
 
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
@@ -60,7 +60,10 @@ export class GeminiProvider implements Provider {
 
     for await (const msg of parseSSE(res.body!)) {
       const chunk = JSON.parse(msg.data);
-      if (chunk.error) throw new ProviderError(`Gemini error: ${chunk.error.message ?? msg.data}`);
+      if (chunk.error) {
+        const status = chunk.error.code;
+        throw new ProviderError(`Gemini error: ${chunk.error.message ?? msg.data}`, status, status === 429 || status >= 500);
+      }
       if (chunk.usageMetadata) {
         const u = chunk.usageMetadata;
         const cached = u.cachedContentTokenCount ?? 0;

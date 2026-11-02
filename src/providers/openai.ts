@@ -1,5 +1,5 @@
 import type { ChatRequest, Message, Provider, StopReason, StreamEvent, ToolCallPart, Usage } from "../types.js";
-import { getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
+import { ProviderError, getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
 
 export interface OpenAIOptions {
   model: string;
@@ -44,7 +44,7 @@ export class OpenAIProvider implements Provider {
         function: { name: t.name, description: t.description, parameters: t.parameters },
       }));
     }
-    const res = await postWithRetry(`${this.baseUrl}/chat/completions`, this.headers, body, req.signal);
+    const res = await postWithRetry(`${this.baseUrl}/chat/completions`, this.headers, body, req);
 
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     let finish: string | undefined;
@@ -53,7 +53,7 @@ export class OpenAIProvider implements Provider {
     for await (const msg of parseSSE(res.body!)) {
       if (msg.data === "[DONE]") break;
       const chunk = JSON.parse(msg.data);
-      if (chunk.error) throw new Error(`Stream error: ${chunk.error.message ?? msg.data}`);
+      if (chunk.error) throw new ProviderError(`Stream error: ${chunk.error.message ?? msg.data}`, undefined, true);
       if (chunk.usage) {
         usage.inputTokens = chunk.usage.prompt_tokens ?? 0;
         usage.outputTokens = chunk.usage.completion_tokens ?? 0;

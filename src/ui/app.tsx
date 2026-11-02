@@ -252,7 +252,7 @@ export function App({ agent, permissions, bridge, banner, modelLabel, switchMode
         return info(permissions.mode === "auto" ? "Auto-approve on: writes and commands run without asking." : "Auto-approve off.");
       case "/usage": {
         const u = agent.totalUsage;
-        return info(`Session: ${u.inputTokens} input, ${u.outputTokens} output, ${u.cacheReadTokens} cache read tokens.`);
+        return info(`Session: ${u.requests ?? 0} requests, ${u.inputTokens} input, ${u.outputTokens} output, ${u.cacheReadTokens} cache read tokens.`);
       }
       case "/exit":
       case "/quit":

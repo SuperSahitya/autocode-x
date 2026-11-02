@@ -83,7 +83,7 @@ test("Anthropic: input_json_delta assembly, tool_result round-trip, cache breakp
     await agent.run("make hello.txt");
 
     assert.equal(readFileSync(join(cwd, "hello.txt"), "utf8"), "hi there\n");
-    assert.deepEqual(agent.totalUsage, { inputTokens: 130, outputTokens: 33, cacheReadTokens: 40, cacheWriteTokens: 0 });
+    assert.deepEqual(agent.totalUsage, { inputTokens: 130, outputTokens: 33, cacheReadTokens: 40, cacheWriteTokens: 0, requests: 2 });
 
     const second = server.requests[1];
     assert.equal(second.system[0].cache_control.type, "ephemeral");
@@ -121,7 +121,7 @@ test("Gemini: function call with thought signature round-trips", async () => {
 
     assert.equal(text, "Writing it.Done.", "thought parts are not shown");
     assert.equal(readFileSync(join(cwd, "hello.txt"), "utf8"), "hi there\n");
-    assert.deepEqual(agent.totalUsage, { inputTokens: 100, outputTokens: 15, cacheReadTokens: 20, cacheWriteTokens: 0 });
+    assert.deepEqual(agent.totalUsage, { inputTokens: 100, outputTokens: 15, cacheReadTokens: 20, cacheWriteTokens: 0, requests: 2 });
 
     const req = server.requests[1];
     assert.equal(req.systemInstruction.parts[0].text, "test");

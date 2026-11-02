@@ -1,3 +1,4 @@
+import { ProviderError, backoff, sleep } from "../providers/sse.js";
 import type { ToolRegistry } from "../tools/index.js";
 import { ProcessManager } from "../tools/processes.js";
 import type { ShellInfo } from "../tools/shell.js";
@@ -5,6 +6,8 @@ import type { Tool, ToolContext, ToolOutput } from "../tools/types.js";
 import type { Checkpoint, Checkpoints } from "../session/checkpoints.js";
 import type { Message, Provider, StopReason, TextPart, ToolCallPart, ToolResultPart, Usage } from "../types.js";
 import type { Permissions } from "./permissions.js";
+
+const MAX_STREAM_RETRIES = 3;
 
 export interface AgentEvents {
   onText?(delta: string): void;
@@ -54,7 +57,7 @@ interface PreparedCall {
 
 export class Agent {
   readonly messages: Message[] = [];
-  readonly totalUsage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  readonly totalUsage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0 };
   provider: Provider;
   readonly processes = new ProcessManager();
   readonly checkpoints: Checkpoint[] = [];
@@ -122,19 +125,25 @@ export class Agent {
   private async loop(userText: string, events: AgentEvents, signal: AbortSignal): Promise<void> {
     this.pushUser([{ type: "text", text: userText }]);
     const maxSteps = this.opts.maxSteps ?? 100;
+    let streamRetries = 0;
 
     for (let step = 0; step < maxSteps; step++) {
       const text: TextPart = { type: "text", text: "" };
       const calls: ToolCallPart[] = [];
-      let stopReason: StopReason = "other";
 
       try {
+        this.countRequest();
         for await (const ev of this.provider.stream({
           system: this.opts.system,
           messages: this.messages,
           tools: this.opts.tools.specs(),
           maxTokens: this.opts.maxTokens ?? 16_000,
           signal,
+          onRetry: (message) => {
+            this.countRequest();
+            events.onNotice?.(message);
+          },
+          onWait: events.onNotice,
         })) {
           if (ev.type === "text") {
             text.text += ev.delta;
@@ -142,17 +151,26 @@ export class Agent {
           } else if (ev.type === "tool_call") {
             calls.push(ev.call);
           } else {
-            stopReason = ev.stopReason;
             this.addUsage(ev.usage);
             events.onStepEnd?.(ev.usage, ev.stopReason);
           }
         }
       } catch (err) {
+        if (!signal.aborted && err instanceof ProviderError && err.retryable && streamRetries < MAX_STREAM_RETRIES) {
+          // tools only run after a complete response, so repeating the call can't repeat any work
+          streamRetries++;
+          events.onNotice?.(`${err.message} Retrying (${streamRetries}/${MAX_STREAM_RETRIES}).`);
+          await sleep(backoff(streamRetries), signal).catch(() => {});
+          if (signal.aborted) return;
+          step--;
+          continue;
+        }
         // drop partial tool calls, they'd have no results
         if (text.text) this.messages.push({ role: "assistant", content: [text] });
         if (signal.aborted) return;
         throw err;
       }
+      streamRetries = 0;
 
       this.messages.push({ role: "assistant", content: [...(text.text ? [text] : []), ...calls] });
       if (calls.length === 0) return;
@@ -239,6 +257,10 @@ export class Agent {
     const last = this.messages.at(-1);
     if (last?.role === "user") last.content.push(...parts);
     else this.messages.push({ role: "user", content: parts });
+  }
+
+  private countRequest(): void {
+    this.totalUsage.requests = (this.totalUsage.requests ?? 0) + 1;
   }
 
   private addUsage(u: Usage): void {
