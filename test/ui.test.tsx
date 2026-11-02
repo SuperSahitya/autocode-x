@@ -9,6 +9,7 @@ import { ToolRegistry } from "../src/tools/index.js";
 import { detectShell } from "../src/tools/shell.js";
 import type { StreamEvent } from "../src/types.js";
 import { App, PermissionBridge, splitCompleted } from "../src/ui/app.js";
+import { logo } from "../src/ui/logo.js";
 import { renderMarkdown } from "../src/ui/markdown.js";
 import { stripAnsi } from "../src/util/text.js";
 import { ScriptedProvider, tempDir, textStep, toolStep } from "./helpers.js";
@@ -200,4 +201,11 @@ test("a resumed session replays its transcript", async () => {
   } finally {
     ui.unmount();
   }
+});
+
+test("logo lines up and drops out on narrow terminals", () => {
+  const rows = stripAnsi(logo(120)).split("\n");
+  assert.equal(rows.length, 6);
+  assert.equal(new Set(rows.map((r) => r.length)).size, 1, "rows are the same width");
+  assert.equal(logo(40), "");
 });

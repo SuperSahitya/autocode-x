@@ -9,6 +9,7 @@ import { Checkpoints } from "./session/checkpoints.js";
 import { SessionStore, type Session } from "./session/store.js";
 import { ToolRegistry } from "./tools/index.js";
 import { detectShell } from "./tools/shell.js";
+import { logo } from "./ui/logo.js";
 import { Renderer } from "./ui/render.js";
 
 const VERSION = "0.4.0";
@@ -123,8 +124,10 @@ async function main(): Promise<void> {
   ask = bridge.ask;
 
   const modelLabel = () => `${current.name} · ${current.profile.model}`;
+  const art = logo();
   const banner =
-    `${pc.bold(pc.cyan("autocode"))} ${pc.dim(`v${VERSION}`)}  ${modelLabel()} ${pc.dim("·")} ${pc.dim(cwd)}\n` +
+    (art ? `\n${art}\n\n` : `\n${pc.bold(pc.cyan("autocode"))} `) +
+    `${pc.dim(`v${VERSION}`)}  ${modelLabel()} ${pc.dim("·")} ${pc.dim(cwd)}\n` +
     pc.dim("/help for commands · esc to interrupt");
   const app = render(
     createElement(App, {
