@@ -4,11 +4,12 @@ import pc from "picocolors";
 import { Agent } from "./agent/agent.js";
 import { DEFAULT_CONTEXT_LIMIT } from "./agent/context.js";
 import { Permissions, type Decision, type PermissionRequest } from "./agent/permissions.js";
-import { buildSystemPrompt } from "./agent/prompt.js";
+import { buildSystemPrompt, repoMapSection } from "./agent/prompt.js";
 import { CONFIG_DIR, createProvider, loadConfig, resolveModelSpec } from "./config.js";
 import { Checkpoints } from "./session/checkpoints.js";
 import { SessionStore, type Session } from "./session/store.js";
 import { ToolRegistry } from "./tools/index.js";
+import { repoMapFor } from "./tools/repomap.js";
 import { detectShell } from "./tools/shell.js";
 import { logo } from "./ui/logo.js";
 import { Renderer } from "./ui/render.js";
@@ -90,6 +91,8 @@ async function main(): Promise<void> {
     shell,
     maxTokens: current.profile.maxTokens,
     contextLimit: current.profile.contextLimit,
+    projectContext:
+      config.repoMap === false ? undefined : async (signal) => repoMapSection(await repoMapFor(cwd).build({ signal })),
     maxSteps: Number(opts.maxSteps),
     searxngUrl: config.searxngUrl,
     checkpoints: new Checkpoints(cwd, join(CONFIG_DIR, "checkpoints")),
@@ -113,7 +116,9 @@ async function main(): Promise<void> {
       renderer.endTurn();
       if (resumeHint()) process.stderr.write(resumeHint() + "\n");
     }
-    return;
+    // otherwise the HTTP keep-alive socket holds the process open for seconds after the answer
+    await new Promise((done) => process.stdout.write("", done));
+    process.exit(0);
   }
 
   // loaded only for interactive sessions, so -p stays fast

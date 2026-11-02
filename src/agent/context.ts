@@ -14,7 +14,7 @@ const MAX_REQUEST_CHARS = 500;
 const MAX_REQUESTS = 12;
 
 // these can simply be run again, so nothing is lost by dropping their output
-const REPEATABLE = new Set(["read_file", "list_dir", "glob", "grep", "web_fetch", "web_search"]);
+const REPEATABLE = new Set(["read_file", "list_dir", "glob", "grep", "repo_map", "web_fetch", "web_search"]);
 
 export const SUMMARY_SYSTEM = `You compact the conversation of a coding agent so it can keep working with less context. The agent will see only your summary and the most recent messages.
 

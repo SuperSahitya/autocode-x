@@ -60,3 +60,10 @@ export function buildSystemPrompt(cwd: string, shell: ShellInfo): string {
   }
   return prompt;
 }
+
+export const repoMapSection = (map: string) =>
+  map &&
+  `# Repository map
+The most depended-on files and their key symbols, from a parse of the source. Use it to go straight to the right file rather than searching. It can be out of date and leaves things out, so read a file before relying on it. repo_map can centre it on what you're working with.
+
+${map}`;

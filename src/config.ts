@@ -30,6 +30,8 @@ const ConfigSchema = z.object({
   shell: z.string().optional(),
   /** SearXNG instance for web_search instead of DuckDuckGo */
   searxngUrl: z.string().optional(),
+  /** false stops adding a map of the code to the system prompt; the repo_map tool stays available */
+  repoMap: z.boolean().optional(),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 

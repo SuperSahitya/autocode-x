@@ -52,6 +52,8 @@ export interface AgentOptions {
   checkpoints?: Checkpoints;
   /** tokens to work within; keeps requests small even when the model's window is much larger */
   contextLimit?: number;
+  /** extra system prompt worked out once, just before the first request, e.g. a map of the code */
+  projectContext?(signal: AbortSignal): Promise<string>;
   /** called after every run, e.g. to save the session */
   onTurnEnd?(): void;
 }
@@ -91,10 +93,13 @@ export class Agent {
   /** what the API reported for the last request, which beats estimating */
   private lastRequest?: { tokens: number; messageCount: number };
   private trimAgainAt = 0;
+  private system: string;
+  private projectContextLoaded = false;
 
   constructor(private readonly opts: AgentOptions) {
     this.provider = opts.provider;
     this.contextLimit = opts.contextLimit ?? DEFAULT_CONTEXT_LIMIT;
+    this.system = opts.system;
   }
 
   dispose(): void {
@@ -112,7 +117,7 @@ export class Agent {
   contextTokens(): number {
     const { lastRequest } = this;
     if (lastRequest?.tokens) return lastRequest.tokens + estimateMessages(this.messages.slice(lastRequest.messageCount));
-    return estimateTokens(this.opts.system) + estimateTokens(JSON.stringify(this.opts.tools.specs())) + estimateMessages(this.messages);
+    return estimateTokens(this.system) + estimateTokens(JSON.stringify(this.opts.tools.specs())) + estimateMessages(this.messages);
   }
 
   /**
@@ -191,6 +196,7 @@ export class Agent {
       checkpointed: false,
     };
     try {
+      await this.loadProjectContext(signal);
       await this.loop(userText, events, signal);
     } finally {
       this.turn = undefined;
@@ -215,7 +221,7 @@ export class Agent {
       try {
         this.countRequest();
         for await (const ev of this.provider.stream({
-          system: this.opts.system,
+          system: this.system,
           messages: this.messages,
           tools: this.opts.tools.specs(),
           maxTokens: this.opts.maxTokens ?? 16_000,
@@ -352,6 +358,18 @@ export class Agent {
     const last = this.messages.at(-1);
     if (last?.role === "user") last.content.push(...parts);
     else this.messages.push({ role: "user", content: parts });
+  }
+
+  // once per session and left unchanged after that, so it doesn't break the prompt cache
+  private async loadProjectContext(signal: AbortSignal): Promise<void> {
+    if (this.projectContextLoaded || !this.opts.projectContext) return;
+    this.projectContextLoaded = true;
+    try {
+      const context = await this.opts.projectContext(signal);
+      if (context) this.system += `\n\n${context}`;
+    } catch {
+      // only an aid; the agent can still explore without it
+    }
   }
 
   // trims in batches rather than a little every step, so the prompt cache survives in between
