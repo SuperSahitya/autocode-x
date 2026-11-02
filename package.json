@@ -16,7 +16,10 @@
     "dev": "tsx src/index.ts",
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts test/*.test.tsx"
+    "test": "tsx --test test/*.test.ts test/*.test.tsx",
+    "bench:retry": "tsx bench/retry.ts",
+    "bench:repomap": "tsx bench/repomap.ts",
+    "bench:compaction": "tsx bench/compaction.ts"
   },
   "license": "MIT",
   "dependencies": {
