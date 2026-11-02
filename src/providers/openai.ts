@@ -1,5 +1,5 @@
 import type { ChatRequest, Message, Provider, StopReason, StreamEvent, ToolCallPart, Usage } from "../types.js";
-import { ProviderError, getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
+import { ProviderError, cutOff, getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
 
 export interface OpenAIOptions {
   model: string;
@@ -48,10 +48,14 @@ export class OpenAIProvider implements Provider {
 
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     let finish: string | undefined;
+    let sawDone = false;
     const calls = new Map<number, { id: string; name: string; args: string }>();
 
     for await (const msg of parseSSE(res.body!)) {
-      if (msg.data === "[DONE]") break;
+      if (msg.data === "[DONE]") {
+        sawDone = true;
+        break;
+      }
       const chunk = JSON.parse(msg.data);
       if (chunk.error) throw new ProviderError(`Stream error: ${chunk.error.message ?? msg.data}`, undefined, true);
       if (chunk.usage) {
@@ -75,6 +79,8 @@ export class OpenAIProvider implements Provider {
       }
       if (choice.finish_reason) finish = choice.finish_reason;
     }
+
+    if (!sawDone && !finish) throw cutOff();
 
     const ordered = [...calls.entries()].sort(([a], [b]) => a - b);
     for (const [i, c] of ordered) {

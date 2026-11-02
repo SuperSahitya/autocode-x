@@ -74,6 +74,9 @@ export class ProviderError extends Error {
   }
 }
 
+/** The stream closed with no sign of a finished response, which HTTP alone doesn't reveal. */
+export const cutOff = () => new ProviderError("The model's response was cut off.", undefined, true);
+
 export interface RetryOptions {
   signal?: AbortSignal;
   onRetry?(message: string): void;

@@ -1,5 +1,5 @@
 import type { ChatRequest, Message, Provider, StopReason, StreamEvent, ToolCallPart, Usage } from "../types.js";
-import { ProviderError, getJSON, parseSSE, postWithRetry } from "./sse.js";
+import { ProviderError, cutOff, getJSON, parseSSE, postWithRetry } from "./sse.js";
 
 export interface GeminiOptions {
   model: string;
@@ -94,6 +94,7 @@ export class GeminiProvider implements Provider {
       if (candidate.finishReason) finish = candidate.finishReason;
     }
 
+    if (!finish) throw cutOff();
     for (const call of calls) yield { type: "tool_call", call };
     if (finish && !["STOP", "MAX_TOKENS"].includes(finish) && calls.length === 0) {
       throw new ProviderError(`Gemini stopped with ${finish}`);

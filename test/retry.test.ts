@@ -4,12 +4,15 @@ import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import { Agent } from "../src/agent/agent.js";
 import { Permissions } from "../src/agent/permissions.js";
+import { AnthropicProvider } from "../src/providers/anthropic.js";
+import { GeminiProvider } from "../src/providers/gemini.js";
+import { OpenAIProvider } from "../src/providers/openai.js";
 import { PacedProvider } from "../src/providers/pace.js";
 import { ProviderError, parseSSE, postWithRetry, retryHint } from "../src/providers/sse.js";
 import { ToolRegistry } from "../src/tools/index.js";
 import { detectShell } from "../src/tools/shell.js";
 import type { StreamEvent } from "../src/types.js";
-import { ScriptedProvider, tempDir, textStep } from "./helpers.js";
+import { ScriptedProvider, mockSSEServer, tempDir, textStep } from "./helpers.js";
 
 /** Answers each request with the next scripted status and body. */
 async function statusServer(script: { status: number; body?: string; headers?: Record<string, string> }[]) {
@@ -153,4 +156,20 @@ test("pacing holds a request back until the window has room", async () => {
   await drain();
   assert.match(notices[0]!, /Pacing to 1 requests a minute, waiting 1s/);
   assert.equal(inner.calls, 2);
+});
+
+test("a stream that closes before the model finishes counts as dropped, not as the full answer", async () => {
+  const partial: [string, unknown, (url: string) => { stream(req: any): AsyncIterable<StreamEvent> }][] = [
+    ["openai", { choices: [{ index: 0, delta: { content: "half an ans" }, finish_reason: null }] }, (url) => new OpenAIProvider({ model: "m", baseUrl: url })],
+    ["anthropic", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "half an ans" } }, (url) => new AnthropicProvider({ model: "m", apiKey: "k", baseUrl: url })],
+    ["gemini", { candidates: [{ content: { role: "model", parts: [{ text: "half an ans" }] } }] }, (url) => new GeminiProvider({ model: "m", apiKey: "k", baseUrl: url })],
+  ];
+  for (const [name, event, create] of partial) {
+    const server = await mockSSEServer([[event]]);
+    const read = async () => {
+      for await (const _ of create(server.url).stream({ system: "s", messages: [], tools: [], maxTokens: 10 }));
+    };
+    await assert.rejects(read, (err: ProviderError) => err.retryable && /cut off/.test(err.message), name);
+    server.close();
+  }
 });

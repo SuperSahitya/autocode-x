@@ -1,5 +1,5 @@
 import type { ChatRequest, Message, Provider, StopReason, StreamEvent, Usage } from "../types.js";
-import { ProviderError, getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
+import { ProviderError, cutOff, getJSON, parseSSE, parseToolArgs, postWithRetry } from "./sse.js";
 
 export interface AnthropicOptions {
   model: string;
@@ -42,6 +42,7 @@ export class AnthropicProvider implements Provider {
 
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     let stopReason: StopReason = "other";
+    let finished = false;
     const blocks = new Map<number, { kind: "tool"; id: string; name: string; json: string } | { kind: "other" }>();
 
     for await (const msg of parseSSE(res.body!)) {
@@ -79,6 +80,7 @@ export class AnthropicProvider implements Provider {
         case "message_delta": {
           if (ev.usage?.output_tokens != null) usage.outputTokens = ev.usage.output_tokens;
           stopReason = mapStop(ev.delta?.stop_reason);
+          finished = true;
           break;
         }
         case "error":
@@ -89,6 +91,7 @@ export class AnthropicProvider implements Provider {
           );
       }
     }
+    if (!finished) throw cutOff();
     yield { type: "done", stopReason, usage };
   }
 }
