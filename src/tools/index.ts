@@ -33,9 +33,13 @@ export class ToolRegistry {
     return this.tools.get(name);
   }
 
+  add(tools: Tool[]): void {
+    for (const t of tools) this.tools.set(t.name, t);
+  }
+
   specs(): ToolSpec[] {
     return [...this.tools.values()].map((t) => {
-      const { $schema: _, ...parameters } = z.toJSONSchema(t.schema) as Record<string, unknown>;
+      const { $schema: _, ...parameters } = t.parameters ?? (z.toJSONSchema(t.schema) as Record<string, unknown>);
       return { name: t.name, description: t.description, parameters };
     });
   }

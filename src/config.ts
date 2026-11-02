@@ -32,6 +32,16 @@ const ConfigSchema = z.object({
   searxngUrl: z.string().optional(),
   /** false stops adding a map of the code to the system prompt; the repo_map tool stays available */
   repoMap: z.boolean().optional(),
+  mcpServers: z
+    .record(
+      z.string(),
+      z.object({
+        command: z.string(),
+        args: z.array(z.string()).optional(),
+        env: z.record(z.string(), z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 

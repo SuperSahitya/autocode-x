@@ -27,6 +27,8 @@ export interface Tool<S extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
   schema: S;
+  /** JSON Schema to advertise when it didn't come from schema, as with MCP tools */
+  parameters?: Record<string, unknown>;
   kind: ToolKind;
   summarize(input: z.infer<S>): string;
   /** scope of "always allow"; defaults to the tool name, undefined = never remember */

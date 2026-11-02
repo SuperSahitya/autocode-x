@@ -9,6 +9,7 @@ import { CONFIG_DIR, createProvider, loadConfig, resolveModelSpec } from "./conf
 import { Checkpoints } from "./session/checkpoints.js";
 import { SessionStore, type Session } from "./session/store.js";
 import { ToolRegistry } from "./tools/index.js";
+import { McpManager } from "./tools/mcp.js";
 import { repoMapFor } from "./tools/repomap.js";
 import { detectShell } from "./tools/shell.js";
 import { logo } from "./ui/logo.js";
@@ -82,17 +83,25 @@ async function main(): Promise<void> {
   const permissions = new Permissions(opts.yolo ? "auto" : "ask", (req) => ask(req));
   const renderer = new Renderer();
 
+  const tools = new ToolRegistry();
+  const mcp = new McpManager(config.mcpServers);
+  // started now but only waited for at the first request, so slow servers don't hold up the prompt
+  const mcpTools = mcp.connect();
+
   const agent = new Agent({
     provider: createProvider(current.profile),
-    tools: new ToolRegistry(),
+    tools,
     permissions,
     system: buildSystemPrompt(cwd, shell),
     cwd,
     shell,
     maxTokens: current.profile.maxTokens,
     contextLimit: current.profile.contextLimit,
-    projectContext:
-      config.repoMap === false ? undefined : async (signal) => repoMapSection(await repoMapFor(cwd).build({ signal })),
+    projectContext: async (signal, notify) => {
+      tools.add(await mcpTools);
+      for (const [name, error] of mcp.errors) notify(`MCP server ${name} didn't start: ${error}`);
+      return config.repoMap === false ? "" : repoMapSection(await repoMapFor(cwd).build({ signal }));
+    },
     maxSteps: Number(opts.maxSteps),
     searxngUrl: config.searxngUrl,
     checkpoints: new Checkpoints(cwd, join(CONFIG_DIR, "checkpoints")),
@@ -102,7 +111,10 @@ async function main(): Promise<void> {
     },
   });
   if (resumed) agent.load(resumed);
-  process.on("exit", () => agent.dispose());
+  process.on("exit", () => {
+    agent.dispose();
+    mcp.close();
+  });
   const resumeHint = () =>
     session.messages.length ? pc.dim(`Resume this session with: autocode --resume ${session.id}`) : "";
 
@@ -143,6 +155,7 @@ async function main(): Promise<void> {
       bridge,
       banner,
       initialPrompt,
+      mcpStatus: () => mcp.status(),
       modelLabel,
       switchModel: (spec: string) => {
         const next = resolveModelSpec(config, spec, current.name);

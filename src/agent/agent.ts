@@ -52,8 +52,8 @@ export interface AgentOptions {
   checkpoints?: Checkpoints;
   /** tokens to work within; keeps requests small even when the model's window is much larger */
   contextLimit?: number;
-  /** extra system prompt worked out once, just before the first request, e.g. a map of the code */
-  projectContext?(signal: AbortSignal): Promise<string>;
+  /** runs once before the first request, returning extra system prompt, e.g. a map of the code */
+  projectContext?(signal: AbortSignal, onNotice: (message: string) => void): Promise<string>;
   /** called after every run, e.g. to save the session */
   onTurnEnd?(): void;
 }
@@ -196,7 +196,7 @@ export class Agent {
       checkpointed: false,
     };
     try {
-      await this.loadProjectContext(signal);
+      await this.loadProjectContext(events, signal);
       await this.loop(userText, events, signal);
     } finally {
       this.turn = undefined;
@@ -361,11 +361,11 @@ export class Agent {
   }
 
   // once per session and left unchanged after that, so it doesn't break the prompt cache
-  private async loadProjectContext(signal: AbortSignal): Promise<void> {
+  private async loadProjectContext(events: AgentEvents, signal: AbortSignal): Promise<void> {
     if (this.projectContextLoaded || !this.opts.projectContext) return;
     this.projectContextLoaded = true;
     try {
-      const context = await this.opts.projectContext(signal);
+      const context = await this.opts.projectContext(signal, (message) => events.onNotice?.(message));
       if (context) this.system += `\n\n${context}`;
     } catch {
       // only an aid; the agent can still explore without it
