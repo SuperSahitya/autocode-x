@@ -5,9 +5,29 @@ import type { ShellInfo } from "../tools/shell.js";
 import type { Tool, ToolContext, ToolOutput } from "../tools/types.js";
 import type { Checkpoint, Checkpoints } from "../session/checkpoints.js";
 import type { Message, Provider, StopReason, TextPart, ToolCallPart, ToolResultPart, Usage } from "../types.js";
+import {
+  DEFAULT_CONTEXT_LIMIT,
+  SUMMARY_SYSTEM,
+  buildSummaryMessage,
+  estimateMessages,
+  estimateTokens,
+  findSplit,
+  isContextOverflow,
+  renderTranscript,
+  trimToolOutputs,
+} from "./context.js";
 import type { Permissions } from "./permissions.js";
 
 const MAX_STREAM_RETRIES = 3;
+
+// shares of the context limit
+const TRIM_AT = 0.5;
+const TRIM_AGAIN_AFTER = 0.1;
+const COMPACT_AT = 0.8;
+const KEEP_AFTER_COMPACT = 0.2;
+const MIN_WORTH_SUMMARIZING = 0.1;
+
+const SUMMARY_MAX_TOKENS = 2000;
 
 export interface AgentEvents {
   onText?(delta: string): void;
@@ -30,6 +50,8 @@ export interface AgentOptions {
   maxSteps?: number;
   searxngUrl?: string;
   checkpoints?: Checkpoints;
+  /** tokens to work within; keeps requests small even when the model's window is much larger */
+  contextLimit?: number;
   /** called after every run, e.g. to save the session */
   onTurnEnd?(): void;
 }
@@ -44,6 +66,7 @@ interface TurnState {
   label: string;
   messageCount: number;
   lastPartCount?: number;
+  compacted?: boolean;
   checkpointed: boolean;
 }
 
@@ -59,14 +82,19 @@ export class Agent {
   readonly messages: Message[] = [];
   readonly totalUsage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0 };
   provider: Provider;
+  contextLimit: number;
   readonly processes = new ProcessManager();
   readonly checkpoints: Checkpoint[] = [];
   private readonly fileState = new Map<string, number>();
   private turn?: TurnState;
   private checkpointNoticeShown = false;
+  /** what the API reported for the last request, which beats estimating */
+  private lastRequest?: { tokens: number; messageCount: number };
+  private trimAgainAt = 0;
 
   constructor(private readonly opts: AgentOptions) {
     this.provider = opts.provider;
+    this.contextLimit = opts.contextLimit ?? DEFAULT_CONTEXT_LIMIT;
   }
 
   dispose(): void {
@@ -77,6 +105,48 @@ export class Agent {
     this.messages.length = 0;
     this.checkpoints.length = 0;
     this.fileState.clear();
+    this.resetContextTracking();
+  }
+
+  /** Tokens the next request would use. */
+  contextTokens(): number {
+    const { lastRequest } = this;
+    if (lastRequest?.tokens) return lastRequest.tokens + estimateMessages(this.messages.slice(lastRequest.messageCount));
+    return estimateTokens(this.opts.system) + estimateTokens(JSON.stringify(this.opts.tools.specs())) + estimateMessages(this.messages);
+  }
+
+  /**
+   * Summarize older messages into one, keeping the recent ones. auto keeps a larger tail and skips
+   * the request when there's too little to gain. Returns undefined when nothing was compacted.
+   */
+  async compact(
+    events: AgentEvents = {},
+    signal = new AbortController().signal,
+    auto = false,
+  ): Promise<{ before: number; after: number } | undefined> {
+    const split = findSplit(this.messages, auto ? this.contextLimit * KEEP_AFTER_COMPACT : 0);
+    if (split === undefined) return undefined;
+    const head = this.messages.slice(0, split);
+    if (auto && estimateMessages(head) < this.contextLimit * MIN_WORTH_SUMMARIZING) return undefined;
+
+    const before = this.contextTokens();
+    let summary = "";
+    try {
+      summary = await this.summarize(head, events, signal);
+    } catch (err) {
+      if (signal.aborted) return undefined;
+      events.onNotice?.(`Couldn't summarize the conversation (${(err as Error).message}). Keeping a list of requests and changed files instead.`);
+    }
+    this.messages.splice(0, split, { role: "user", content: [{ type: "text", text: buildSummaryMessage(head, summary) }] });
+    this.shiftCheckpoints(split);
+    // the file contents it read are gone, so it has to read again before editing
+    this.fileState.clear();
+    this.resetContextTracking();
+
+    const after = this.contextTokens();
+    events.onNotice?.(`Compacted the conversation: ~${formatTokens(before)} to ~${formatTokens(after)} tokens.`);
+    this.opts.onTurnEnd?.();
+    return { before, after };
   }
 
   state(): AgentState {
@@ -100,8 +170,14 @@ export class Agent {
     this.messages.length = checkpoint.messageCount;
     const last = this.messages.at(-1);
     if (checkpoint.lastPartCount !== undefined && last?.role === "user") last.content.length = checkpoint.lastPartCount;
+    if (checkpoint.compacted) {
+      // the turn is part of the summary and can't be cut out of it, so say that it no longer applies
+      const label = checkpoint.label.replace(/\s+/g, " ").slice(0, 100);
+      this.pushUser([{ type: "text", text: `[The user ran /undo: files are back to how they were before "${label}". The summary may describe work that no longer exists, so check the files.]` }]);
+    }
     // files changed under the agent; make it read them again before editing
     this.fileState.clear();
+    this.resetContextTracking();
     this.opts.onTurnEnd?.();
     return { checkpoint, files };
   }
@@ -126,10 +202,15 @@ export class Agent {
     this.pushUser([{ type: "text", text: userText }]);
     const maxSteps = this.opts.maxSteps ?? 100;
     let streamRetries = 0;
+    let overflowHandled = false;
 
     for (let step = 0; step < maxSteps; step++) {
       const text: TextPart = { type: "text", text: "" };
       const calls: ToolCallPart[] = [];
+
+      await this.manageContext(events, signal);
+      if (signal.aborted) return;
+      const messageCount = this.messages.length;
 
       try {
         this.countRequest();
@@ -152,10 +233,23 @@ export class Agent {
             calls.push(ev.call);
           } else {
             this.addUsage(ev.usage);
+            this.lastRequest = {
+              tokens: ev.usage.inputTokens + (ev.usage.cacheReadTokens ?? 0) + (ev.usage.cacheWriteTokens ?? 0),
+              messageCount,
+            };
             events.onStepEnd?.(ev.usage, ev.stopReason);
           }
         }
       } catch (err) {
+        // the real limit turned out to be lower than we thought
+        if (!signal.aborted && !overflowHandled && isContextOverflow(err)) {
+          overflowHandled = true;
+          trimToolOutputs(this.messages);
+          if (await this.compact(events, signal)) {
+            step--;
+            continue;
+          }
+        }
         if (!signal.aborted && err instanceof ProviderError && err.retryable && streamRetries < MAX_STREAM_RETRIES) {
           // tools only run after a complete response, so repeating the call can't repeat any work
           streamRetries++;
@@ -242,6 +336,7 @@ export class Agent {
           createdAt: Date.now(),
           messageCount: turn.messageCount,
           lastPartCount: turn.lastPartCount,
+          compacted: turn.compacted,
         });
         return;
       }
@@ -259,6 +354,57 @@ export class Agent {
     else this.messages.push({ role: "user", content: parts });
   }
 
+  // trims in batches rather than a little every step, so the prompt cache survives in between
+  private async manageContext(events: AgentEvents, signal: AbortSignal): Promise<void> {
+    const used = this.contextTokens();
+    if (used < this.contextLimit * COMPACT_AT && used < Math.max(this.contextLimit * TRIM_AT, this.trimAgainAt)) return;
+    if (trimToolOutputs(this.messages)) this.lastRequest = undefined;
+    const trimmed = this.contextTokens();
+    this.trimAgainAt = trimmed + this.contextLimit * TRIM_AGAIN_AFTER;
+    if (trimmed >= this.contextLimit * COMPACT_AT) await this.compact(events, signal, true);
+  }
+
+  private async summarize(head: Message[], events: AgentEvents, signal: AbortSignal): Promise<string> {
+    let summary = "";
+    this.countRequest();
+    for await (const ev of this.provider.stream({
+      system: SUMMARY_SYSTEM,
+      messages: [{ role: "user", content: [{ type: "text", text: renderTranscript(head) }] }],
+      tools: [],
+      maxTokens: SUMMARY_MAX_TOKENS,
+      signal,
+      onRetry: (message) => {
+        this.countRequest();
+        events.onNotice?.(message);
+      },
+      onWait: events.onNotice,
+    })) {
+      if (ev.type === "text") summary += ev.delta;
+      else if (ev.type === "done") this.addUsage(ev.usage);
+    }
+    return summary.trim();
+  }
+
+  // compaction removed messages, so indexes into the conversation have moved
+  private shiftCheckpoints(split: number): void {
+    const shift = (c: { messageCount: number; lastPartCount?: number; compacted?: boolean }) => {
+      if (c.messageCount > split) {
+        c.messageCount += 1 - split;
+      } else {
+        c.messageCount = 1;
+        c.lastPartCount = undefined;
+        c.compacted = true;
+      }
+    };
+    this.checkpoints.forEach(shift);
+    if (this.turn) shift(this.turn);
+  }
+
+  private resetContextTracking(): void {
+    this.lastRequest = undefined;
+    this.trimAgainAt = 0;
+  }
+
   private countRequest(): void {
     this.totalUsage.requests = (this.totalUsage.requests ?? 0) + 1;
   }
@@ -270,6 +416,8 @@ export class Agent {
     this.totalUsage.cacheWriteTokens! += u.cacheWriteTokens ?? 0;
   }
 }
+
+const formatTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
 function safeSummarize(tool: Tool, input: unknown): string {
   try {

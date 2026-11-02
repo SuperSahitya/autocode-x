@@ -18,6 +18,8 @@ const ProfileSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   /** waits instead of exceeding this, for APIs with a known rate limit */
   requestsPerMinute: z.number().int().positive().optional(),
+  /** tokens to work within before trimming and compacting */
+  contextLimit: z.number().int().positive().optional(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
 
@@ -32,7 +34,7 @@ const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 
 const BUILTIN_PROFILES: Record<string, Profile> = {
-  anthropic: { provider: "anthropic", model: "claude-sonnet-5-5", apiKeyEnv: "ANTHROPIC_API_KEY" },
+  anthropic: { provider: "anthropic", model: "claude-sonnet-5-5", apiKeyEnv: "ANTHROPIC_API_KEY", contextLimit: 150_000 },
   gemini: { provider: "gemini", model: "gemini-3.5-flash-lite", apiKeyEnv: "GEMINI_API_KEY" },
   groq: {
     provider: "openai",
@@ -40,7 +42,7 @@ const BUILTIN_PROFILES: Record<string, Profile> = {
     baseUrl: "https://api.groq.com/openai/v1",
     apiKeyEnv: "GROQ_API_KEY",
   },
-  ollama: { provider: "openai", model: "qwen2.5-coder:14b", baseUrl: "http://localhost:11434/v1" },
+  ollama: { provider: "openai", model: "qwen2.5-coder:14b", baseUrl: "http://localhost:11434/v1", contextLimit: 32_000 },
 };
 
 export const CONFIG_DIR = process.env.AUTOCODE_HOME ?? join(homedir(), ".autocode");

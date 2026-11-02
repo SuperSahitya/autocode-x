@@ -203,6 +203,32 @@ test("a resumed session replays its transcript", async () => {
   }
 });
 
+test("/compact summarizes older messages and /usage reports requests and context", async () => {
+  const { ui, screen, type } = setup([textStep("reply one"), textStep("reply two"), textStep("short summary")]);
+  try {
+    await type("first");
+    await type("\r");
+    await waitFor(() => screen().includes("reply one"), "first turn");
+    await type("/compact");
+    await type("\r");
+    await waitFor(() => screen().includes("Nothing to compact yet"), "too little to compact");
+
+    await type("second");
+    await type("\r");
+    await waitFor(() => screen().includes("reply two"), "second turn");
+    await type("/compact");
+    await type("\r");
+    await waitFor(() => screen().includes("Compacted the conversation"), "compaction");
+
+    await type("/usage");
+    await type("\r");
+    await waitFor(() => screen().includes("3 requests"), "usage");
+    assert.match(screen(), /Context: ~\d+ of 100000 tokens/);
+  } finally {
+    ui.unmount();
+  }
+});
+
 test("logo lines up and drops out on narrow terminals", () => {
   const rows = stripAnsi(logo(120)).split("\n");
   assert.equal(rows.length, 6);

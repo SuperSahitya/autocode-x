@@ -2,6 +2,7 @@ import { Box, Static, Text, useApp, useInput } from "ink";
 import pc from "picocolors";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Agent, AgentEvents } from "../agent/agent.js";
+import { COMPACT_MARKER } from "../agent/context.js";
 import type { Decision, PermissionRequest, Permissions } from "../agent/permissions.js";
 import type { Message, ToolResultPart } from "../types.js";
 import { formatLiveOutput, formatTokens, formatToolHeader, formatToolResult, oneLine } from "./format.js";
@@ -35,16 +36,17 @@ interface LiveTool {
   output: string;
 }
 
-const COMMANDS = ["/help", "/undo", "/clear", "/model", "/models", "/ps", "/yolo", "/usage", "/exit"];
+const COMMANDS = ["/help", "/undo", "/compact", "/clear", "/model", "/models", "/ps", "/yolo", "/usage", "/exit"];
 
 const HELP = `Commands
   /undo           revert the files changed by the last turn and drop it from the conversation
+  /compact        summarize older messages now to free up context (one request)
   /model [spec]   show or switch: <model>, <profile> or <profile>:<model>
   /models         list models from the current provider
   /ps             list background processes
   /clear          start a new conversation
   /yolo           toggle auto-approve for writes and commands
-  /usage          token usage for this session
+  /usage          requests, tokens and context used by this session
   /exit           quit
 Keys
   enter submits · \\ then enter for a new line · ↑↓ history · tab completes commands
@@ -62,7 +64,8 @@ export function transcriptEntries(messages: Message[]): EntryData[] {
   const out: EntryData[] = [];
   for (const m of messages) {
     for (const p of m.content) {
-      if (p.type === "text" && p.text.trim()) out.push({ kind: m.role === "user" ? "user" : "assistant", text: p.text });
+      if (p.type === "text" && p.text.startsWith(COMPACT_MARKER)) out.push({ kind: "info", text: "Earlier messages were compacted." });
+      else if (p.type === "text" && p.text.trim()) out.push({ kind: m.role === "user" ? "user" : "assistant", text: p.text });
       if (p.type === "tool_call") {
         const input = (p.input ?? {}) as Record<string, unknown>;
         const key = INPUT_KEYS.find((k) => typeof input[k] === "string");
@@ -221,6 +224,20 @@ export function App({ agent, permissions, bridge, banner, modelLabel, switchMode
           return push({ kind: "error", text: `Undo failed: ${(err as Error).message}` });
         }
       }
+      case "/compact": {
+        if (running) return info("Wait for the current turn to finish, or press esc first.");
+        const ac = new AbortController();
+        abort.current = ac;
+        setRunning(true);
+        try {
+          const r = await agent.compact({ onNotice: (m) => push({ kind: "info", text: pc.yellow(m) }) }, ac.signal);
+          if (!r && !ac.signal.aborted) info("Nothing to compact yet.");
+        } finally {
+          abort.current = undefined;
+          setRunning(false);
+        }
+        return;
+      }
       case "/clear":
         agent.clear();
         return info("Conversation cleared.");
@@ -252,7 +269,10 @@ export function App({ agent, permissions, bridge, banner, modelLabel, switchMode
         return info(permissions.mode === "auto" ? "Auto-approve on: writes and commands run without asking." : "Auto-approve off.");
       case "/usage": {
         const u = agent.totalUsage;
-        return info(`Session: ${u.requests ?? 0} requests, ${u.inputTokens} input, ${u.outputTokens} output, ${u.cacheReadTokens} cache read tokens.`);
+        return info(
+          `Session: ${u.requests ?? 0} requests, ${u.inputTokens} input, ${u.outputTokens} output, ${u.cacheReadTokens} cache read tokens.\n` +
+            `Context: ~${agent.contextTokens()} of ${agent.contextLimit} tokens.`,
+        );
       }
       case "/exit":
       case "/quit":

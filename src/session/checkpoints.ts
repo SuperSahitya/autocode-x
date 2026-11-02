@@ -15,6 +15,8 @@ export interface Checkpoint {
   messageCount: number;
   /** parts in the trailing user message at that point, if the turn merged into it */
   lastPartCount?: number;
+  /** the turn has since been folded into a summary, so undo can restore its files but not cut it out */
+  compacted?: boolean;
 }
 
 // Never snapshotted: dependencies, build output and caches are large and regenerable.

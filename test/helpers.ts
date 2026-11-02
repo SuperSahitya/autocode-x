@@ -26,6 +26,8 @@ export class ScriptedProvider implements Provider {
   readonly name = "scripted";
   readonly model = "scripted-1";
   calls = 0;
+  /** what each call was sent, copied because the agent keeps changing its messages */
+  readonly requests: ChatRequest[] = [];
 
   constructor(private readonly steps: (StreamEvent[] | ((signal?: AbortSignal) => AsyncIterable<StreamEvent>))[]) {}
 
@@ -34,6 +36,7 @@ export class ScriptedProvider implements Provider {
   }
 
   async *stream(req: ChatRequest): AsyncGenerator<StreamEvent> {
+    this.requests.push({ ...req, messages: structuredClone(req.messages) });
     const step = this.steps[this.calls++] ?? [{ type: "done", stopReason: "end_turn", usage: { inputTokens: 0, outputTokens: 0 } }];
     if (typeof step === "function") return yield* step(req.signal);
     for (const ev of step) {

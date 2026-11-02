@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import { TRIMMED_MARKER } from "../agent/context.js";
 import type { ToolOutput } from "../tools/types.js";
 import type { ToolCallPart, Usage } from "../types.js";
 
@@ -38,6 +39,7 @@ export function formatToolResult(call: ToolCallPart, r: ToolOutput): string {
     if (!r.display.includes("\n@@")) return gutter + pc.dim(r.display);
     return colorDiff(r.display).map((l) => INDENT + l).join("\n");
   }
+  if (r.output.startsWith(TRIMMED_MARKER)) return gutter + pc.dim("Output trimmed");
   const lines = r.output.trimEnd().split("\n");
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   switch (call.name) {

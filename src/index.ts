@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { Agent } from "./agent/agent.js";
+import { DEFAULT_CONTEXT_LIMIT } from "./agent/context.js";
 import { Permissions, type Decision, type PermissionRequest } from "./agent/permissions.js";
 import { buildSystemPrompt } from "./agent/prompt.js";
 import { CONFIG_DIR, createProvider, loadConfig, resolveModelSpec } from "./config.js";
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
     cwd,
     shell,
     maxTokens: current.profile.maxTokens,
+    contextLimit: current.profile.contextLimit,
     maxSteps: Number(opts.maxSteps),
     searxngUrl: config.searxngUrl,
     checkpoints: new Checkpoints(cwd, join(CONFIG_DIR, "checkpoints")),
@@ -140,6 +142,7 @@ async function main(): Promise<void> {
       switchModel: (spec: string) => {
         const next = resolveModelSpec(config, spec, current.name);
         agent.provider = createProvider(next.profile);
+        agent.contextLimit = next.profile.contextLimit ?? DEFAULT_CONTEXT_LIMIT;
         current = next;
         return modelLabel();
       },
