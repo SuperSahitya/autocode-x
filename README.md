@@ -76,3 +76,5 @@ npm run dev
 npm test
 npm run typecheck
 ```
+
+Benchmarks and results are in [bench](bench/README.md).

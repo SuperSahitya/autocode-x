@@ -1,0 +1,135 @@
+{
+  "commit": "2a279aa",
+  "model": "gemini-3.5-flash-lite",
+  "contextLimit": 32000,
+  "requestsSpent": 24,
+  "summary": {
+    "full": {
+      "correct": 0.95,
+      "correctLow": 0.8833333333333333,
+      "correctHigh": 1,
+      "unknown": 0.03333333333333333,
+      "wrong": 0.016666666666666666,
+      "tokens": 52407.666666666664,
+      "apiInputTokens": 64545.5
+    },
+    "compacted": {
+      "correct": 0.65,
+      "correctLow": 0.5333333333333333,
+      "correctHigh": 0.7666666666666667,
+      "unknown": 0.31666666666666665,
+      "wrong": 0.03333333333333333,
+      "tokens": 4981.833333333333,
+      "apiInputTokens": 6283
+    },
+    "dropOldest": {
+      "correct": 0.16666666666666666,
+      "correctLow": 0.08333333333333333,
+      "correctHigh": 0.26666666666666666,
+      "unknown": 0.8333333333333334,
+      "wrong": 0,
+      "tokens": 4603.5,
+      "apiInputTokens": 5827.5
+    }
+  },
+  "byKind": {
+    "user_constraint": {
+      "full": 1,
+      "compacted": 1,
+      "dropOldest": 0
+    },
+    "file_content": {
+      "full": 0.8333333333333334,
+      "compacted": 0.3333333333333333,
+      "dropOldest": 0.3333333333333333
+    },
+    "tool_output": {
+      "full": 1,
+      "compacted": 0.3333333333333333,
+      "dropOldest": 0.26666666666666666
+    },
+    "assistant_decision": {
+      "full": 0.8333333333333334,
+      "compacted": 0.75,
+      "dropOldest": 0
+    },
+    "file_changed": {
+      "full": 1,
+      "compacted": 0.6666666666666666,
+      "dropOldest": 0
+    },
+    "command": {
+      "full": 1,
+      "compacted": 0.8333333333333334,
+      "dropOldest": 0.6666666666666666
+    }
+  },
+  "sessions": [
+    {
+      "name": "pacer-burst-guard",
+      "rawTokens": 51620,
+      "trimmedTokens": 27551,
+      "compactedTokens": 5344,
+      "correct": {
+        "full": 1,
+        "compacted": 0.9,
+        "dropOldest": 0.3
+      }
+    },
+    {
+      "name": "mcp-reconnect",
+      "rawTokens": 53476,
+      "trimmedTokens": 31119,
+      "compactedTokens": 5534,
+      "correct": {
+        "full": 1,
+        "compacted": 0.5,
+        "dropOldest": 0
+      }
+    },
+    {
+      "name": "web-fetch-cache",
+      "rawTokens": 50964,
+      "trimmedTokens": 29261,
+      "compactedTokens": 2956,
+      "correct": {
+        "full": 1,
+        "compacted": 0.8,
+        "dropOldest": 0.3
+      }
+    },
+    {
+      "name": "checkpoint-long-paths",
+      "rawTokens": 52070,
+      "trimmedTokens": 28391,
+      "compactedTokens": 4941,
+      "correct": {
+        "full": 0.9,
+        "compacted": 0.8,
+        "dropOldest": 0.2
+      }
+    },
+    {
+      "name": "markdown-tables",
+      "rawTokens": 54898,
+      "trimmedTokens": 31580,
+      "compactedTokens": 5417,
+      "correct": {
+        "full": 0.8,
+        "compacted": 0.3,
+        "dropOldest": 0
+      }
+    },
+    {
+      "name": "repomap-kotlin",
+      "rawTokens": 51418,
+      "trimmedTokens": 29381,
+      "compactedTokens": 5699,
+      "correct": {
+        "full": 1,
+        "compacted": 0.6,
+        "dropOldest": 0.2
+      }
+    }
+  ]
+}

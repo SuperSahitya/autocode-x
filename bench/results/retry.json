@@ -1,0 +1,105 @@
+{
+  "commit": "2a279aa",
+  "stepsPerRun": 5,
+  "results": [
+    {
+      "faultRate": 0.1,
+      "runs": 200,
+      "completionRate": 1,
+      "completionRateWithoutRetries": 0.545,
+      "faultsInjected": 130,
+      "byFault": {
+        "503": 18,
+        "429_with_delay": 21,
+        "429_no_delay": 30,
+        "connection_reset": 18,
+        "stream_dropped": 19,
+        "stream_truncated": 24
+      },
+      "silentlyWrongAnswers": 0,
+      "runsWithDuplicateToolCalls": 0,
+      "retriesBeforeTheServerAskedFor": 0,
+      "requestsPerRun": 6.65,
+      "medianSeconds": 0.677,
+      "p95Seconds": 7.285,
+      "failures": []
+    },
+    {
+      "faultRate": 0.25,
+      "runs": 200,
+      "completionRate": 1,
+      "completionRateWithoutRetries": 0.16,
+      "faultsInjected": 429,
+      "byFault": {
+        "503": 65,
+        "429_with_delay": 65,
+        "429_no_delay": 70,
+        "connection_reset": 86,
+        "stream_dropped": 70,
+        "stream_truncated": 73
+      },
+      "silentlyWrongAnswers": 0,
+      "runsWithDuplicateToolCalls": 0,
+      "retriesBeforeTheServerAskedFor": 0,
+      "requestsPerRun": 8.145,
+      "medianSeconds": 4.41,
+      "p95Seconds": 16.467,
+      "failures": []
+    },
+    {
+      "faultRate": 0.5,
+      "runs": 200,
+      "completionRate": 0.97,
+      "completionRateWithoutRetries": 0.005,
+      "faultsInjected": 1270,
+      "byFault": {
+        "503": 214,
+        "429_with_delay": 234,
+        "429_no_delay": 207,
+        "connection_reset": 185,
+        "stream_dropped": 207,
+        "stream_truncated": 223
+      },
+      "silentlyWrongAnswers": 0,
+      "runsWithDuplicateToolCalls": 0,
+      "retriesBeforeTheServerAskedFor": 0,
+      "requestsPerRun": 12.235,
+      "medianSeconds": 17.371,
+      "p95Seconds": 46.934,
+      "failures": [
+        "The model's response was cut off.",
+        "Connection lost: terminated",
+        "The model's response was cut off.",
+        "The model's response was cut off.",
+        "Connection lost: terminated",
+        "The model's response was cut off."
+      ]
+    }
+  ],
+  "failFast": [
+    {
+      "name": "daily quota used up",
+      "requests": 1,
+      "ms": 9,
+      "failedWithError": true
+    },
+    {
+      "name": "billing problem",
+      "requests": 1,
+      "ms": 4,
+      "failedWithError": true
+    },
+    {
+      "name": "wait longer than 2 minutes",
+      "requests": 1,
+      "ms": 2,
+      "failedWithError": true
+    },
+    {
+      "name": "bad API key",
+      "requests": 1,
+      "ms": 3,
+      "failedWithError": true
+    }
+  ]
+}
