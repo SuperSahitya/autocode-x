@@ -15,7 +15,7 @@ import { detectShell } from "./tools/shell.js";
 import { logo } from "./ui/logo.js";
 import { Renderer } from "./ui/render.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
 interface CliOptions {
   print?: string;

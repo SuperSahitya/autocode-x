@@ -1,6 +1,6 @@
 {
   "name": "autocode",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A minimal, fast, multi-provider coding agent for the terminal",
   "type": "module",
   "bin": {
