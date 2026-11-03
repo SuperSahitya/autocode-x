@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ChatRequest, Provider, StreamEvent } from "../src/types.js";
 
 export const BENCH_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -69,4 +70,38 @@ export function saveResults(name: string, data: object): void {
   const commit = execSync("git describe --always --dirty", { encoding: "utf8" }).trim();
   writeFileSync(path, `${JSON.stringify({ commit, ...data }, null, 2)}\n`);
   console.log(`\nSaved ${path}`);
+}
+
+export class BudgetExhausted extends Error {}
+
+/** Counts every request, resends included, and refuses to send past the cap. */
+export class CappedProvider implements Provider {
+  spent = 0;
+
+  constructor(
+    private readonly inner: Provider,
+    private readonly cap: number,
+  ) {}
+
+  get name() {
+    return this.inner.name;
+  }
+  get model() {
+    return this.inner.model;
+  }
+  listModels() {
+    return this.inner.listModels();
+  }
+
+  async *stream(req: ChatRequest): AsyncGenerator<StreamEvent> {
+    if (this.spent >= this.cap) throw new BudgetExhausted(`Reached the cap of ${this.cap} requests.`);
+    this.spent++;
+    yield* this.inner.stream({
+      ...req,
+      onRetry: (message) => {
+        this.spent++;
+        req.onRetry?.(message);
+      },
+    });
+  }
 }

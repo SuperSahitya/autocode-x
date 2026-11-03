@@ -19,7 +19,7 @@ import { repoMapFor } from "../src/tools/repomap.js";
 import { detectShell } from "../src/tools/shell.js";
 import type { ChatRequest, Provider, StreamEvent } from "../src/types.js";
 import { runProcess } from "../src/util/process.js";
-import { BENCH_DIR, bootstrapCI, mean, pct, percentile, saveResults, table } from "./lib.js";
+import { BENCH_DIR, BudgetExhausted, CappedProvider, bootstrapCI, mean, pct, percentile, saveResults, table } from "./lib.js";
 
 const MAX_STEPS = 20;
 const DEFAULT_CAP = 150;
@@ -113,40 +113,6 @@ class SolutionProvider implements Provider {
       yield* paths.map((path, i) => call("write_file", { path, content: this.task.solution.get(path) }, i));
     } else yield { type: "text", delta: "Done." };
     yield { type: "done", stopReason: this.step++ < 2 ? "tool_use" : "end_turn", usage };
-  }
-}
-
-class BudgetExhausted extends Error {}
-
-/** Counts every request, resends included, and refuses to send past the cap. */
-class CappedProvider implements Provider {
-  spent = 0;
-
-  constructor(
-    private readonly inner: Provider,
-    private readonly cap: number,
-  ) {}
-
-  get name() {
-    return this.inner.name;
-  }
-  get model() {
-    return this.inner.model;
-  }
-  listModels() {
-    return this.inner.listModels();
-  }
-
-  async *stream(req: ChatRequest): AsyncGenerator<StreamEvent> {
-    if (this.spent >= this.cap) throw new BudgetExhausted(`Reached the cap of ${this.cap} requests.`);
-    this.spent++;
-    yield* this.inner.stream({
-      ...req,
-      onRetry: (message) => {
-        this.spent++;
-        req.onRetry?.(message);
-      },
-    });
   }
 }
 

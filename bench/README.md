@@ -4,10 +4,12 @@
 npm run bench:retry
 npm run bench:repomap
 npm run bench:compaction
+npm run bench:memory
+npm run bench:memory -- --e2e
 npm run eval
 ```
 
-Retry and repo map use no API quota. Compaction uses 24 requests. Output goes to `results/`, which isn't committed.
+Retry and repo map use no API quota. Compaction uses 24 requests. Memory uses about 7 embedding requests, and `--e2e` about 100 model requests. It reads commit messages from the repos `bench:repomap` clones. Output goes to `results/`, which isn't committed.
 
 ## Retries
 
@@ -41,6 +43,30 @@ A 5-step task against a local server that fails on purpose, 200 runs per failure
 | Random | 21.3% |
 
 About twice as good as random, but no better than the simple baselines.
+
+## Memory
+
+455 items: 45 facts with a question each, 30 close distractors and 380 real commit messages. I wrote the facts and questions, so treat these as a small test, not a general result. Embeddings are `gemini-embedding-2` at 768 dimensions.
+
+| Questions | Keyword recall@5 | Vector recall@5 | Hybrid recall@5 |
+|---|---|---|---|
+| Share an identifier with the answer (15) | 100% | 100% | 100% |
+| Share some words (15) | 100% | 100% | 100% |
+| Reworded, no shared words (15) | 0% | 100% | 100% |
+| All (45) | 66.7% | 100% | 100% |
+
+Keyword search can't find the reworded ones by design. Hybrid doesn't beat vector search here: MRR@5 is 0.850 against 0.944, or 0.808 against 0.935 on the 23 questions held out when picking its settings. It's slightly ahead only on near-identical identifiers (0.867 against 0.833).
+
+New sessions on `gemini-3.5-flash-lite`, one run per question:
+
+| | Right |
+|---|---|
+| Answer is in memory, memory off | 0 of 7 |
+| Answer is in memory, memory on | 8 of 8 |
+| Told in one session, asked in the next | 3 of 3 |
+| Nothing to find | 0 of 2 |
+
+With nothing to find, the model made nothing up, but it kept searching until the 6-step limit and never said so.
 
 ## Eval
 
