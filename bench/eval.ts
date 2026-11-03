@@ -4,6 +4,8 @@
 //   npm run eval                    real model; answers are saved, so a rerun skips finished tasks
 //   npm run eval -- --only csv      just the tasks whose name contains this
 //   npm run eval -- --cap 150       stop after this many model requests
+//   npm run eval -- --features-off  no repo map, trimming or compaction, with its results kept apart
+//   npm run eval -- --rerun         run again and save nothing, so a retry can't replace a recorded result
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -23,7 +25,7 @@ const MAX_STEPS = 20;
 const DEFAULT_CAP = 150;
 const CHECK_FILE = "eval-check.test.mjs";
 const TASKS_DIR = join(BENCH_DIR, "eval", "tasks");
-const RAW_PATH = join(BENCH_DIR, "results", "eval-raw.json");
+const NO_LIMIT = 10_000_000;
 
 interface Task {
   name: string;
@@ -168,13 +170,14 @@ async function runTask(task: Task, provider: Provider): Promise<TaskResult> {
   const agent = new Agent({
     provider,
     // nothing here needs the web, and it keeps runs from depending on what a site says today
-    tools: new ToolRegistry(DEFAULT_TOOLS.filter((t) => t.kind !== "network")),
+    tools: new ToolRegistry(DEFAULT_TOOLS.filter((t) => t.kind !== "network" && !(featuresOff && t.name === "repo_map"))),
     permissions: new Permissions("auto", async () => "allow"),
     system: buildSystemPrompt(dir, shell),
     cwd: dir,
     shell,
     maxSteps: MAX_STEPS,
-    projectContext: async (signal) => repoMapSection(await repoMapFor(dir).build({ signal })),
+    contextLimit: featuresOff ? NO_LIMIT : undefined,
+    projectContext: featuresOff ? undefined : async (signal) => repoMapSection(await repoMapFor(dir).build({ signal })),
   });
   let toolCalls = 0;
   const started = Date.now();
@@ -222,8 +225,13 @@ const { values: args } = parseArgs({
     only: { type: "string" },
     cap: { type: "string" },
     model: { type: "string" },
+    "features-off": { type: "boolean" },
+    rerun: { type: "boolean" },
   },
 });
+const featuresOff = args["features-off"] ?? false;
+const resultsName = featuresOff ? "eval-off" : "eval";
+const rawPath = join(BENCH_DIR, "results", `${resultsName}-raw.json`);
 
 const tasks = readdirSync(TASKS_DIR)
   .filter((f) => f.endsWith(".txt"))
@@ -239,7 +247,7 @@ const cap = Number(args.cap ?? DEFAULT_CAP);
 const real = args.mock ? undefined : new CappedProvider(createProvider({ ...chosen.profile, requestsPerMinute: chosen.profile.requestsPerMinute ?? 6 }), cap);
 
 // a failure of the provider says nothing about the agent, so those tasks run again next time
-const saved: Record<string, TaskResult> = !args.mock && existsSync(RAW_PATH) ? JSON.parse(readFileSync(RAW_PATH, "utf8")) : {};
+const saved: Record<string, TaskResult> = !args.mock && !args.rerun && existsSync(rawPath) ? JSON.parse(readFileSync(rawPath, "utf8")) : {};
 const results: TaskResult[] = [];
 for (const task of tasks) {
   if (saved[task.name]) {
@@ -250,10 +258,10 @@ for (const task of tasks) {
   try {
     const result = await runTask(task, real ?? new SolutionProvider(task));
     results.push(result);
-    if (real && !(result.stoppedBy && !result.stoppedBy.startsWith("reached"))) {
+    if (real && !args.rerun && !(result.stoppedBy && !result.stoppedBy.startsWith("reached"))) {
       saved[task.name] = result;
-      mkdirSync(dirname(RAW_PATH), { recursive: true });
-      writeFileSync(RAW_PATH, `${JSON.stringify(saved, null, 2)}\n`);
+      mkdirSync(dirname(rawPath), { recursive: true });
+      writeFileSync(rawPath, `${JSON.stringify(saved, null, 2)}\n`);
     }
   } catch (err) {
     if (!(err instanceof BudgetExhausted)) throw err;
@@ -277,7 +285,8 @@ console.log(`Requests per task: mean ${mean(requests).toFixed(1)}, max ${percent
 
 // a partial run or a mock shouldn't replace the real results
 const complete = results.length === tasks.length && results.every((r) => !r.stoppedBy || r.stoppedBy.startsWith("reached"));
-if (!args.mock && !args.only && complete) {
-  saveResults("eval", { model: modelName, maxSteps: MAX_STEPS, passRate: mean(passes), passRateLow: low, passRateHigh: high, totalRequests: requests.reduce((a, b) => a + b, 0), results });
+if (args.rerun) for (const r of results) if (r.checkOutput) console.log(`\n${r.name}\n${r.checkOutput}`);
+if (!args.mock && !args.only && !args.rerun && complete) {
+  saveResults(resultsName, { model: modelName, maxSteps: MAX_STEPS, passRate: mean(passes), passRateLow: low, passRateHigh: high, totalRequests: requests.reduce((a, b) => a + b, 0), results });
 }
 process.exit(0);
