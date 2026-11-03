@@ -4,6 +4,7 @@ import { render } from "ink-testing-library";
 import { Agent } from "../src/agent/agent.js";
 import { Permissions } from "../src/agent/permissions.js";
 import { join } from "node:path";
+import { ProviderError } from "../src/providers/sse.js";
 import { Checkpoints } from "../src/session/checkpoints.js";
 import { ToolRegistry } from "../src/tools/index.js";
 import { detectShell } from "../src/tools/shell.js";
@@ -11,6 +12,7 @@ import type { StreamEvent } from "../src/types.js";
 import { App, PermissionBridge, splitCompleted } from "../src/ui/app.js";
 import { logo } from "../src/ui/logo.js";
 import { renderMarkdown } from "../src/ui/markdown.js";
+import { Renderer } from "../src/ui/render.js";
 import { stripAnsi } from "../src/util/text.js";
 import { ScriptedProvider, tempDir, textStep, toolStep } from "./helpers.js";
 
@@ -240,6 +242,41 @@ test("/mcp lists servers without calling the model", async () => {
   } finally {
     ui.unmount();
   }
+});
+
+const droppedStream = async function* (): AsyncGenerator<StreamEvent> {
+  yield { type: "text", delta: "half an ans" };
+  await sleep(50);
+  throw new ProviderError("Connection lost", undefined, true);
+};
+
+test("text from a dropped stream is cleared before the retry", async () => {
+  const { ui, screen, type } = setup([droppedStream, textStep("the full answer")]);
+  try {
+    await type("hi");
+    await type("\r");
+    await waitFor(() => screen().includes("the full answer"), "retried answer", 8000);
+    assert.doesNotMatch(screen(), /half an ansthe full/);
+  } finally {
+    ui.unmount();
+  }
+});
+
+test("piped output only ever gets the answer that was kept", async () => {
+  const written: string[] = [];
+  const stream = (into: string[]) => ({ isTTY: false, write: (s: string) => into.push(s) }) as unknown as NodeJS.WriteStream;
+  const renderer = new Renderer(stream(written), stream([]));
+  const agent = new Agent({
+    provider: new ScriptedProvider([droppedStream, textStep("the full answer")]),
+    tools: new ToolRegistry([]),
+    permissions: new Permissions("auto", async () => "allow"),
+    system: "test",
+    cwd: tempDir(),
+    shell: detectShell(),
+  });
+  await agent.run("hi", renderer.events);
+  renderer.endTurn();
+  assert.equal(written.join(""), "the full answer\n");
 });
 
 test("logo lines up and drops out on narrow terminals", () => {

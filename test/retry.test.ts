@@ -113,14 +113,14 @@ test("a stream cut off mid-response is retried without keeping the partial text"
   assert.deepEqual(agent.messages.at(-1), { role: "assistant", content: [{ type: "text", text: "the full answer" }] });
   assert.equal(agent.messages.length, 2);
   assert.equal(agent.totalUsage.requests, 2);
-  assert.match(notices[0]!, /Connection lost: terminated Retrying \(1\/3\)/);
+  assert.match(notices[0]!, /Connection lost: terminated\. Retrying \(1\/5\)/);
 });
 
 test("a stream that keeps failing gives up and surfaces the error", async () => {
   const dropped = async function* (): AsyncGenerator<StreamEvent> {
     throw new ProviderError("Connection lost", undefined, true);
   };
-  const provider = new ScriptedProvider([dropped, dropped, dropped, dropped, dropped]);
+  const provider = new ScriptedProvider([dropped, dropped, dropped, dropped]);
   const agent = new Agent({
     provider,
     tools: new ToolRegistry([]),
@@ -128,9 +128,10 @@ test("a stream that keeps failing gives up and surfaces the error", async () => 
     system: "test",
     cwd: tempDir(),
     shell: detectShell(),
+    maxStreamRetries: 2,
   });
   await assert.rejects(agent.run("hi"), /Connection lost/);
-  assert.equal(provider.calls, 4, "the first try and three retries");
+  assert.equal(provider.calls, 3, "the first try and two retries");
 });
 
 test("pacing holds a request back until the window has room", async () => {
@@ -182,4 +183,19 @@ test("a malformed Gemini response can be repeated, but a safety block can't", as
   await assert.rejects(read, (err: ProviderError) => err.retryable);
   await assert.rejects(read, (err: ProviderError) => !err.retryable);
   server.close();
+});
+
+test("tool calls in a malformed Gemini response never reach the agent", async () => {
+  const parts = [{ functionCall: { name: "bash", args: { command: "half a comm" } } }];
+  const server = await mockSSEServer([[{ candidates: [{ content: { role: "model", parts }, finishReason: "MALFORMED_RESPONSE" }] }]]);
+  const seen: StreamEvent[] = [];
+  const read = async () => {
+    for await (const ev of new GeminiProvider({ model: "m", apiKey: "k", baseUrl: server.url }).stream({ system: "s", messages: [], tools: [], maxTokens: 10 })) seen.push(ev);
+  };
+  try {
+    await assert.rejects(read, (err: ProviderError) => err.retryable);
+    assert.deepEqual(seen, []);
+  } finally {
+    server.close();
+  }
 });

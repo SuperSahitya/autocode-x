@@ -173,6 +173,10 @@ export function App({ agent, permissions, bridge, banner, modelLabel, switchMode
         text.current += delta;
         schedule();
       },
+      onTextDiscarded: () => {
+        text.current = "";
+        schedule();
+      },
       onToolStart: (call, summary) => {
         flushText(true);
         live.current.set(call.id, { header: formatToolHeader(call, summary), output: "" });

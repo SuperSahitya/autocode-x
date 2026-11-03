@@ -18,7 +18,8 @@ import {
 } from "./context.js";
 import type { Permissions } from "./permissions.js";
 
-const MAX_STREAM_RETRIES = 3;
+// matches what postWithRetry allows for a failed request, since a dropped stream is no less likely to recover
+const MAX_STREAM_RETRIES = 5;
 
 // shares of the context limit
 const TRIM_AT = 0.5;
@@ -31,6 +32,8 @@ const SUMMARY_MAX_TOKENS = 2000;
 
 export interface AgentEvents {
   onText?(delta: string): void;
+  /** the text so far won't be kept, because the response failed and is being requested again */
+  onTextDiscarded?(): void;
   onToolStart?(call: ToolCallPart, summary: string): void;
   onToolOutput?(call: ToolCallPart, chunk: string): void;
   onToolEnd?(call: ToolCallPart, result: ToolOutput): void;
@@ -48,6 +51,7 @@ export interface AgentOptions {
   shell: ShellInfo;
   maxTokens?: number;
   maxSteps?: number;
+  maxStreamRetries?: number;
   searxngUrl?: string;
   checkpoints?: Checkpoints;
   /** tokens to work within; keeps requests small even when the model's window is much larger */
@@ -256,10 +260,12 @@ export class Agent {
             continue;
           }
         }
-        if (!signal.aborted && err instanceof ProviderError && err.retryable && streamRetries < MAX_STREAM_RETRIES) {
+        const maxStreamRetries = this.opts.maxStreamRetries ?? MAX_STREAM_RETRIES;
+        if (!signal.aborted && err instanceof ProviderError && err.retryable && streamRetries < maxStreamRetries) {
           // tools only run after a complete response, so repeating the call can't repeat any work
           streamRetries++;
-          events.onNotice?.(`${err.message} Retrying (${streamRetries}/${MAX_STREAM_RETRIES}).`);
+          if (text.text) events.onTextDiscarded?.();
+          events.onNotice?.(`${err.message.replace(/\.?$/, ".")} Retrying (${streamRetries}/${maxStreamRetries}).`);
           await sleep(backoff(streamRetries), signal).catch(() => {});
           if (signal.aborted) return;
           step--;

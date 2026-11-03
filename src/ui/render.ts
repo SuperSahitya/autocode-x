@@ -30,6 +30,8 @@ class Spinner {
 // Plain streaming output for headless mode: text to stdout, tool activity to stderr.
 export class Renderer {
   private atLineStart = true;
+  /** piped output waits for the whole response, as text already written can't be taken back */
+  private held = "";
   private readonly spinner: Spinner;
 
   constructor(
@@ -42,9 +44,13 @@ export class Renderer {
   readonly events: AgentEvents = {
     onText: (delta) => {
       this.spinner.stop();
-      this.out.write(delta);
-      this.atLineStart = delta.endsWith("\n");
+      if (this.out.isTTY) this.write(delta);
+      else this.held += delta;
     },
+    onTextDiscarded: () => {
+      this.held = "";
+    },
+    onStepEnd: () => this.flushHeld(),
     onToolStart: (call, summary) => {
       this.spinner.stop();
       this.newline();
@@ -67,6 +73,7 @@ export class Renderer {
 
   endTurn(usage?: Usage): void {
     this.spinner.stop();
+    this.flushHeld();
     this.newline();
     if (usage) this.log.write(formatUsage(usage) + "\n");
   }
@@ -75,6 +82,16 @@ export class Renderer {
     this.spinner.stop();
     this.newline();
     this.log.write(pc.red(`✖ ${message}\n`));
+  }
+
+  private write(text: string): void {
+    this.out.write(text);
+    this.atLineStart = text.endsWith("\n");
+  }
+
+  private flushHeld(): void {
+    if (this.held) this.write(this.held);
+    this.held = "";
   }
 
   private newline(): void {
