@@ -173,3 +173,13 @@ test("a stream that closes before the model finishes counts as dropped, not as t
     server.close();
   }
 });
+
+test("a malformed Gemini response can be repeated, but a safety block can't", async () => {
+  const server = await mockSSEServer([[{ candidates: [{ finishReason: "MALFORMED_RESPONSE" }] }], [{ candidates: [{ finishReason: "SAFETY" }] }]]);
+  const read = async () => {
+    for await (const _ of new GeminiProvider({ model: "m", apiKey: "k", baseUrl: server.url }).stream({ system: "s", messages: [], tools: [], maxTokens: 10 }));
+  };
+  await assert.rejects(read, (err: ProviderError) => err.retryable);
+  await assert.rejects(read, (err: ProviderError) => !err.retryable);
+  server.close();
+});

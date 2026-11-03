@@ -97,7 +97,8 @@ export class GeminiProvider implements Provider {
     if (!finish) throw cutOff();
     for (const call of calls) yield { type: "tool_call", call };
     if (finish && !["STOP", "MAX_TOKENS"].includes(finish) && calls.length === 0) {
-      throw new ProviderError(`Gemini stopped with ${finish}`);
+      // the model garbled its output this time, which a repeat usually avoids; a safety block would only happen again
+      throw new ProviderError(`Gemini stopped with ${finish}`, undefined, finish.startsWith("MALFORMED"));
     }
     const stopReason: StopReason = calls.length ? "tool_use" : finish === "MAX_TOKENS" ? "max_tokens" : "end_turn";
     yield { type: "done", stopReason, usage };
