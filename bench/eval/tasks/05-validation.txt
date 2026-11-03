@@ -1,0 +1,96 @@
+kind: feature
+createUser accepts anything at the moment. Make it throw a ValidationError when the email has no "@", or when age isn't a non-negative integer. Add ValidationError to src/errors.js as a subclass of AppError, with a field property naming the bad field ("email" or "age"). Check email first. Valid users must behave as they do now.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/src/errors.js --
+export class AppError extends Error {
+  constructor(message, status = 500) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(what) {
+    super(`${what} not found`, 404);
+  }
+}
+-- repo/src/users.js --
+import { NotFoundError } from "./errors.js";
+
+const users = new Map();
+let nextId = 1;
+
+export function createUser({ email, age }) {
+  const user = { id: nextId++, email, age };
+  users.set(user.id, user);
+  return user;
+}
+
+export function getUser(id) {
+  const user = users.get(id);
+  if (!user) throw new NotFoundError("user");
+  return user;
+}
+-- solution/src/errors.js --
+export class AppError extends Error {
+  constructor(message, status = 500) {
+    super(message);
+    this.name = new.target.name;
+    this.status = status;
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(what) {
+    super(`${what} not found`, 404);
+  }
+}
+
+export class ValidationError extends AppError {
+  constructor(field, message) {
+    super(message, 400);
+    this.field = field;
+  }
+}
+-- solution/src/users.js --
+import { NotFoundError, ValidationError } from "./errors.js";
+
+const users = new Map();
+let nextId = 1;
+
+export function createUser({ email, age }) {
+  if (typeof email !== "string" || !email.includes("@")) throw new ValidationError("email", "email must contain @");
+  if (!Number.isInteger(age) || age < 0) throw new ValidationError("age", "age must be a non-negative integer");
+  const user = { id: nextId++, email, age };
+  users.set(user.id, user);
+  return user;
+}
+
+export function getUser(id) {
+  const user = users.get(id);
+  if (!user) throw new NotFoundError("user");
+  return user;
+}
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { AppError, ValidationError } from "./src/errors.js";
+import { createUser, getUser } from "./src/users.js";
+
+const fails = (input, field) =>
+  assert.throws(
+    () => createUser(input),
+    (err) => err instanceof ValidationError && err instanceof AppError && err.field === field,
+  );
+
+test("bad email", () => fails({ email: "nope", age: 3 }, "email"));
+test("bad age", () => {
+  for (const age of [-1, 1.5, "7", undefined]) fails({ email: "a@b.c", age }, "age");
+});
+test("email is checked first", () => fails({ email: "nope", age: -1 }, "email"));
+test("zero is a valid age, and valid users are stored", () => {
+  const user = createUser({ email: "a@b.c", age: 0 });
+  assert.equal(getUser(user.id).age, 0);
+});

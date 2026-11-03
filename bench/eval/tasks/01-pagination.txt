@@ -1,0 +1,49 @@
+kind: bug
+Users say the first page of the product listing skips items, and the last partial page never shows up. Pages are numbered from 1. Please fix it.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/src/pagination.js --
+export function pageCount(total, size) {
+  return Math.floor(total / size);
+}
+
+export function paginate(items, page, size) {
+  const start = page * size;
+  return items.slice(start, start + size);
+}
+-- repo/src/listing.js --
+import { pageCount, paginate } from "./pagination.js";
+import { allProducts } from "./products.js";
+
+export function listing(page, size = 2) {
+  const products = allProducts();
+  return { page, pages: pageCount(products.length, size), items: paginate(products, page, size) };
+}
+-- repo/src/products.js --
+export const allProducts = () => ["lamp", "desk", "chair", "shelf", "rug"];
+-- solution/src/pagination.js --
+export function pageCount(total, size) {
+  return Math.ceil(total / size);
+}
+
+export function paginate(items, page, size) {
+  const start = (page - 1) * size;
+  return items.slice(start, start + size);
+}
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { listing } from "./src/listing.js";
+import { pageCount, paginate } from "./src/pagination.js";
+
+test("first page starts at the first item", () => {
+  assert.deepEqual(paginate([1, 2, 3, 4, 5], 1, 2), [1, 2]);
+});
+test("last partial page is reachable", () => {
+  assert.equal(pageCount(5, 2), 3);
+  assert.equal(pageCount(4, 2), 2);
+  assert.deepEqual(paginate([1, 2, 3, 4, 5], 3, 2), [5]);
+});
+test("listing reports both", () => {
+  assert.deepEqual(listing(3), { page: 3, pages: 3, items: ["rug"] });
+});

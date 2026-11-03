@@ -1,0 +1,54 @@
+kind: refactor
+orders.js and refunds.js each format money with the same inline code. Move it into a new file, src/format.js, exporting formatMoney(cents), and use it from both. The output must not change.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/src/orders.js --
+export function orderLine(order) {
+  const sign = order.cents < 0 ? "-" : "";
+  const amount = (Math.abs(order.cents) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `Order ${order.id}: ${sign}$${amount}`;
+}
+-- repo/src/refunds.js --
+export function refundLine(refund) {
+  const sign = refund.cents < 0 ? "-" : "";
+  const amount = (Math.abs(refund.cents) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `Refund for ${refund.orderId} (${refund.reason}): ${sign}$${amount}`;
+}
+-- solution/src/format.js --
+export function formatMoney(cents) {
+  const sign = cents < 0 ? "-" : "";
+  const amount = (Math.abs(cents) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${sign}$${amount}`;
+}
+-- solution/src/orders.js --
+import { formatMoney } from "./format.js";
+
+export const orderLine = (order) => `Order ${order.id}: ${formatMoney(order.cents)}`;
+-- solution/src/refunds.js --
+import { formatMoney } from "./format.js";
+
+export const refundLine = (refund) => `Refund for ${refund.orderId} (${refund.reason}): ${formatMoney(refund.cents)}`;
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import { formatMoney } from "./src/format.js";
+import { orderLine } from "./src/orders.js";
+import { refundLine } from "./src/refunds.js";
+
+test("formatMoney handles sign, grouping and zero", () => {
+  assert.equal(formatMoney(123456789), "$1,234,567.89");
+  assert.equal(formatMoney(-250), "-$2.50");
+  assert.equal(formatMoney(0), "$0.00");
+});
+test("output is unchanged", () => {
+  assert.equal(orderLine({ id: 7, cents: 100000 }), "Order 7: $1,000.00");
+  assert.equal(refundLine({ orderId: 7, reason: "late", cents: -995 }), "Refund for 7 (late): -$9.95");
+});
+test("the duplicate code is gone", () => {
+  for (const file of ["src/orders.js", "src/refunds.js"]) {
+    const source = readFileSync(file, "utf8");
+    assert.match(source, /format\.js/, file);
+    assert.doesNotMatch(source, /toFixed/, file);
+  }
+});

@@ -1,0 +1,65 @@
+kind: bug
+Importing a CSV breaks when a field has a comma in it, and on files with Windows line endings. Quoted fields can contain commas, and "" inside quotes means a literal quote. Blank lines should be skipped. Empty fields must stay as empty strings. Please fix the import.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/src/csv.js --
+export function parseLine(line) {
+  return line.split(",");
+}
+-- repo/src/import.js --
+import { parseLine } from "./csv.js";
+
+export function parseCsv(text) {
+  const [header, ...rows] = text.split("\n").map(parseLine);
+  return rows.map((row) => Object.fromEntries(header.map((name, i) => [name, row[i]])));
+}
+-- solution/src/csv.js --
+export function parseLine(line) {
+  const fields = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      fields.push(field);
+      field = "";
+    } else field += c;
+  }
+  fields.push(field);
+  return fields;
+}
+-- solution/src/import.js --
+import { parseLine } from "./csv.js";
+
+export function parseCsv(text) {
+  const [header, ...rows] = text
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .map(parseLine);
+  return rows.map((row) => Object.fromEntries(header.map((name, i) => [name, row[i]])));
+}
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { parseLine } from "./src/csv.js";
+import { parseCsv } from "./src/import.js";
+
+test("quoted commas and escaped quotes", () => {
+  assert.deepEqual(parseLine('a,"b,c","say ""hi"""'), ["a", "b,c", 'say "hi"']);
+});
+test("empty fields stay", () => {
+  assert.deepEqual(parseLine(',x,,""'), ["", "x", "", ""]);
+});
+test("windows line endings and blank lines", () => {
+  assert.deepEqual(parseCsv('name,city\r\nAda,"London, UK"\r\n\r\nLin,\r\n'), [
+    { name: "Ada", city: "London, UK" },
+    { name: "Lin", city: "" },
+  ]);
+});

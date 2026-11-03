@@ -1,0 +1,93 @@
+kind: implement
+Implement LRUCache in src/lru.js. new LRUCache(capacity) throws a RangeError if capacity is below 1. get(key) returns the value, or undefined if missing, and counts as a use. set(key, value) adds or updates the entry, counts as a use, and evicts the least recently used entry when over capacity. A size getter returns the number of entries.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/src/lru.js --
+export class LRUCache {
+  constructor(capacity) {
+    throw new Error("not implemented");
+  }
+}
+-- repo/src/lookups.js --
+import { LRUCache } from "./lru.js";
+
+export function cached(fn, capacity = 100) {
+  const cache = new LRUCache(capacity);
+  return (key) => {
+    let value = cache.get(key);
+    if (value === undefined) {
+      value = fn(key);
+      cache.set(key, value);
+    }
+    return value;
+  };
+}
+-- solution/src/lru.js --
+export class LRUCache {
+  #entries = new Map();
+
+  constructor(capacity) {
+    if (capacity < 1) throw new RangeError("capacity must be at least 1");
+    this.capacity = capacity;
+  }
+
+  get size() {
+    return this.#entries.size;
+  }
+
+  get(key) {
+    if (!this.#entries.has(key)) return undefined;
+    const value = this.#entries.get(key);
+    this.#entries.delete(key);
+    this.#entries.set(key, value);
+    return value;
+  }
+
+  set(key, value) {
+    this.#entries.delete(key);
+    this.#entries.set(key, value);
+    if (this.#entries.size > this.capacity) this.#entries.delete(this.#entries.keys().next().value);
+  }
+}
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { cached } from "./src/lookups.js";
+import { LRUCache } from "./src/lru.js";
+
+test("evicts the least recently used", () => {
+  const c = new LRUCache(2);
+  c.set("a", 1);
+  c.set("b", 2);
+  c.get("a");
+  c.set("c", 3);
+  assert.equal(c.get("b"), undefined);
+  assert.equal(c.get("a"), 1);
+  assert.equal(c.get("c"), 3);
+  assert.equal(c.size, 2);
+});
+test("updating counts as a use and doesn't grow the cache", () => {
+  const c = new LRUCache(2);
+  c.set("a", 1);
+  c.set("b", 2);
+  c.set("a", 10);
+  c.set("c", 3);
+  assert.equal(c.get("a"), 10);
+  assert.equal(c.get("b"), undefined);
+  assert.equal(c.size, 2);
+});
+test("falsy values are real values", () => {
+  const c = new LRUCache(1);
+  c.set("zero", 0);
+  assert.equal(c.get("zero"), 0);
+});
+test("capacity below 1 is refused", () => {
+  assert.throws(() => new LRUCache(0), RangeError);
+});
+test("the existing caller works", () => {
+  let calls = 0;
+  const double = cached((x) => (calls++, x * 2), 2);
+  assert.equal(double(2), 4);
+  assert.equal(double(2), 4);
+  assert.equal(calls, 1);
+});

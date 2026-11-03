@@ -19,7 +19,8 @@
     "test": "tsx --test test/*.test.ts test/*.test.tsx",
     "bench:retry": "tsx bench/retry.ts",
     "bench:repomap": "tsx bench/repomap.ts",
-    "bench:compaction": "tsx bench/compaction.ts"
+    "bench:compaction": "tsx bench/compaction.ts",
+    "eval": "tsx bench/eval.ts"
   },
   "license": "MIT",
   "dependencies": {

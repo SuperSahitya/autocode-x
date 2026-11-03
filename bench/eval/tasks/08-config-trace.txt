@@ -1,0 +1,50 @@
+kind: bug
+The timeout we set in config.json has no effect, requests always use 5000ms. Find out why and fix it. The default should still be 5000 when config.json doesn't set one.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/config.json --
+{ "baseUrl": "https://api.example.test", "requestTimeoutMs": 1500, "retries": 2 }
+-- repo/src/config.js --
+import { readFileSync } from "node:fs";
+
+export function readConfig(raw = JSON.parse(readFileSync("config.json", "utf8"))) {
+  return {
+    baseUrl: raw.baseUrl,
+    timeoutMs: raw.timeout ?? 5000,
+    retries: raw.retries ?? 0,
+  };
+}
+-- repo/src/client.js --
+import { readConfig } from "./config.js";
+import { requestOptions } from "./options.js";
+
+export function createClient(config = readConfig()) {
+  return { url: (path) => config.baseUrl + path, options: requestOptions(config) };
+}
+-- repo/src/options.js --
+export const requestOptions = (config) => ({ timeout: config.timeoutMs, retry: config.retries });
+-- solution/src/config.js --
+import { readFileSync } from "node:fs";
+
+export function readConfig(raw = JSON.parse(readFileSync("config.json", "utf8"))) {
+  return {
+    baseUrl: raw.baseUrl,
+    timeoutMs: raw.requestTimeoutMs ?? 5000,
+    retries: raw.retries ?? 0,
+  };
+}
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createClient } from "./src/client.js";
+import { readConfig } from "./src/config.js";
+
+test("the timeout in config.json reaches the client", () => {
+  assert.deepEqual(createClient().options, { timeout: 1500, retry: 2 });
+});
+test("the default still applies", () => {
+  assert.equal(readConfig({ baseUrl: "x" }).timeoutMs, 5000);
+});
+test("a timeout of zero isn't replaced by the default", () => {
+  assert.equal(readConfig({ baseUrl: "x", requestTimeoutMs: 0 }).timeoutMs, 0);
+});

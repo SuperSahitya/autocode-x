@@ -1,0 +1,65 @@
+kind: refactor
+Rename the function calcTotal to computeTotal everywhere in src, including comments. Behaviour must not change.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/src/cart.js --
+// calcTotal adds up line prices, in cents
+export function calcTotal(lines) {
+  return lines.reduce((sum, line) => sum + line.price * line.qty, 0);
+}
+-- repo/src/invoice.js --
+import { calcTotal } from "./cart.js";
+
+export const invoiceAmount = (invoice) => calcTotal(invoice.lines) + invoice.shipping;
+-- repo/src/checkout/summary.js --
+import * as cart from "../cart.js";
+
+export const summary = (lines) => `Total: ${cart.calcTotal(lines)}`;
+-- repo/src/checkout/discount.js --
+import { calcTotal as total } from "../cart.js";
+
+export const discounted = (lines, percent) => Math.round(total(lines) * (1 - percent / 100));
+-- repo/src/calcTotals.js --
+// a different function that only looks similar, and keeps its name
+export const calcTotals = (carts) => carts.map((c) => c.length);
+-- solution/src/cart.js --
+// computeTotal adds up line prices, in cents
+export function computeTotal(lines) {
+  return lines.reduce((sum, line) => sum + line.price * line.qty, 0);
+}
+-- solution/src/invoice.js --
+import { computeTotal } from "./cart.js";
+
+export const invoiceAmount = (invoice) => computeTotal(invoice.lines) + invoice.shipping;
+-- solution/src/checkout/summary.js --
+import * as cart from "../cart.js";
+
+export const summary = (lines) => `Total: ${cart.computeTotal(lines)}`;
+-- solution/src/checkout/discount.js --
+import { computeTotal as total } from "../cart.js";
+
+export const discounted = (lines, percent) => Math.round(total(lines) * (1 - percent / 100));
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+import { computeTotal } from "./src/cart.js";
+import { calcTotals } from "./src/calcTotals.js";
+import { discounted } from "./src/checkout/discount.js";
+import { summary } from "./src/checkout/summary.js";
+import { invoiceAmount } from "./src/invoice.js";
+
+const lines = [{ price: 100, qty: 2 }, { price: 50, qty: 1 }];
+const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
+
+test("every caller works under the new name", () => {
+  assert.equal(computeTotal(lines), 250);
+  assert.equal(invoiceAmount({ lines, shipping: 10 }), 260);
+  assert.equal(summary(lines), "Total: 250");
+  assert.equal(discounted(lines, 10), 225);
+});
+test("the old name is gone, and the similar one survives", () => {
+  for (const file of walk("src")) assert.doesNotMatch(readFileSync(file, "utf8"), /calcTotal(?!s)/, file);
+  assert.deepEqual(calcTotals([[1, 2]]), [2]);
+});

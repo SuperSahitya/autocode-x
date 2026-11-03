@@ -6,6 +6,8 @@ npm run bench:repomap      # about 10 min, clones 8 repos into bench/.repos, no 
 npm run bench:compaction   # 4 model requests per session, cached in results/compaction-raw.json
 ```
 
+`npm run eval` is separate: see [Eval](#eval).
+
 Raw numbers are in `results/`. Everything below is from commit `2a279aa`.
 
 ## Retries
@@ -67,3 +69,15 @@ Injected: with no focus, does the 1000-token map in the system prompt show a fil
 | Random | 36.0% | 15.6% |
 
 The map is about 2x random, but not better than the simple baselines overall, and which ranking wins varies by repo. It also doesn't show whether the agent finishes tasks more often. A focused rebuild takes a median of 107ms, and parsing a repo takes 212ms to 1.5s.
+
+## Eval
+
+10 small coding tasks in `eval/tasks`: bug fixes, features, refactors and one implementation from a spec. The real agent works in a throwaway folder with web tools off and a limit of 20 steps. A task passes if a check the agent never saw passes afterwards.
+
+```
+npm run eval -- --verify        # each check fails on the starting code and passes on the solution
+npm run eval -- --mock          # the whole pipeline with a fake model, no quota
+npm run eval                    # real model, stops at 150 requests, finished tasks are saved and skipped
+npm run eval -- --only csv
+npm run eval -- --cap 50
+```

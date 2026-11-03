@@ -1,0 +1,53 @@
+kind: feature
+Add a --json flag to bin/report.js. With it, the command prints a JSON array of { "name", "total" } objects, sorted by total from highest to lowest, and nothing else. Without the flag, the output must stay exactly as it is now.
+-- repo/package.json --
+{ "type": "module", "scripts": { "test": "node --test" } }
+-- repo/bin/report.js --
+import { sales } from "../src/data.js";
+import { renderText, totals } from "../src/report.js";
+
+console.log(renderText(totals(sales)));
+-- repo/src/data.js --
+export const sales = [
+  { name: "north", amount: 120 },
+  { name: "south", amount: 300 },
+  { name: "north", amount: 80 },
+  { name: "east", amount: 50 },
+];
+-- repo/src/report.js --
+export function totals(rows) {
+  const byName = new Map();
+  for (const row of rows) byName.set(row.name, (byName.get(row.name) ?? 0) + row.amount);
+  return [...byName].map(([name, total]) => ({ name, total }));
+}
+
+export const renderText = (rows) => rows.map((r) => `${r.name}: ${r.total}`).join("\n");
+-- solution/bin/report.js --
+import { sales } from "../src/data.js";
+import { renderText, totals } from "../src/report.js";
+
+const rows = totals(sales);
+if (process.argv.includes("--json")) {
+  console.log(JSON.stringify([...rows].sort((a, b) => b.total - a.total)));
+} else {
+  console.log(renderText(rows));
+}
+-- check.test.mjs --
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { test } from "node:test";
+
+const run = (...args) => spawnSync(process.execPath, ["bin/report.js", ...args], { encoding: "utf8" });
+
+test("--json prints sorted objects and nothing else", () => {
+  const { stdout, status } = run("--json");
+  assert.equal(status, 0);
+  assert.deepEqual(JSON.parse(stdout), [
+    { name: "south", total: 300 },
+    { name: "north", total: 200 },
+    { name: "east", total: 50 },
+  ]);
+});
+test("the plain output is unchanged", () => {
+  assert.equal(run().stdout.replace(/\r/g, ""), "north: 200\nsouth: 300\neast: 50\n");
+});
