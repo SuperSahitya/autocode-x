@@ -8,7 +8,7 @@ npm run bench:compaction   # 4 model requests per session, cached in results/com
 
 `npm run eval` is separate: see [Eval](#eval).
 
-Raw numbers are in `results/`. Everything below is from commit `2a279aa`.
+Everything below is from commit `2a279aa`.
 
 ## Retries
 

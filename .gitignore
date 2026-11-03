@@ -4,3 +4,4 @@ dist/
 .env
 .autocode/
 bench/.repos/
+bench/results/
