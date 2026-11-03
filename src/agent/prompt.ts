@@ -35,7 +35,7 @@ export function buildSystemPrompt(cwd: string, shell: ShellInfo): string {
   \`npm create vite@latest my-app -- --template react-ts\`, \`npx --yes ...\`, \`npm install --no-audit --no-fund\`.
 - Start dev servers and watchers with run_in_background, then use bash_output (with wait_ms) to confirm they came up. They're stopped when the session ends, so also tell the user the command to run them.
 - When unsure about a library's current API, version or setup, look it up with web_search and web_fetch instead of guessing.
-- Independent read-only lookups can be issued as several tool calls at once.
+- Put every tool call you already know you need in the same response: several files to read, several searches, edits to several files. There's no limit of one call per response, and calls run in order. Wait for a result only when the next call depends on it.
 - Don't commit, push, or run destructive commands (rm -rf, git reset --hard, force-push) unless the user asked.
 - If a tool call is denied, don't retry it; stop and ask the user how to proceed.
 
