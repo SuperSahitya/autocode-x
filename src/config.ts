@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { AnthropicProvider } from "./providers/anthropic.js";
+import { GeminiEmbedder, type Embedder } from "./memory/embed.js";
 import { GeminiProvider } from "./providers/gemini.js";
 import { OpenAIProvider } from "./providers/openai.js";
 import { PacedProvider } from "./providers/pace.js";
@@ -32,6 +33,10 @@ const ConfigSchema = z.object({
   searxngUrl: z.string().optional(),
   /** false stops adding a map of the code to the system prompt; the repo_map tool stays available */
   repoMap: z.boolean().optional(),
+  /** false turns off saved notes and searching past sessions */
+  memory: z.boolean().optional(),
+  /** send memory to Gemini for embeddings; defaults to on only while using a Gemini profile */
+  memoryEmbeddings: z.boolean().optional(),
   mcpServers: z
     .record(
       z.string(),
@@ -112,8 +117,18 @@ export function createProvider(profile: Profile): Provider {
   return profile.requestsPerMinute ? new PacedProvider(provider, profile.requestsPerMinute) : provider;
 }
 
+const apiKeyOf = (profile: Profile) => profile.apiKey ?? (profile.apiKeyEnv ? process.env[profile.apiKeyEnv] : undefined);
+
+// off for other providers, so choosing a local model doesn't quietly send your sessions to Google
+export function createEmbedder(config: Config, current: Profile): Embedder | undefined {
+  if (!(config.memoryEmbeddings ?? current.provider === "gemini")) return undefined;
+  const profile = current.provider === "gemini" ? current : config.profiles.gemini;
+  const apiKey = profile && apiKeyOf(profile);
+  return apiKey ? new GeminiEmbedder(apiKey, profile.baseUrl) : undefined;
+}
+
 function createAdapter(profile: Profile): Provider {
-  const apiKey = profile.apiKey ?? (profile.apiKeyEnv ? process.env[profile.apiKeyEnv] : undefined);
+  const apiKey = apiKeyOf(profile);
   if (!apiKey && profile.apiKeyEnv) {
     throw new Error(`No API key: set ${profile.apiKeyEnv} or add apiKey to the profile.`);
   }

@@ -5,7 +5,9 @@ import { Agent } from "./agent/agent.js";
 import { DEFAULT_CONTEXT_LIMIT } from "./agent/context.js";
 import { Permissions, type Decision, type PermissionRequest } from "./agent/permissions.js";
 import { buildSystemPrompt, repoMapSection } from "./agent/prompt.js";
-import { CONFIG_DIR, createProvider, loadConfig, resolveModelSpec } from "./config.js";
+import { CONFIG_DIR, createEmbedder, createProvider, loadConfig, resolveModelSpec } from "./config.js";
+import { Memory, type MemoryOptions } from "./memory/store.js";
+import { memorySection, memoryStatus, memoryTools } from "./memory/tools.js";
 import { Checkpoints } from "./session/checkpoints.js";
 import { SessionStore, type Session } from "./session/store.js";
 import { ToolRegistry } from "./tools/index.js";
@@ -26,6 +28,17 @@ interface CliOptions {
   listProfiles?: boolean;
   resume?: string | boolean;
   sessions?: boolean;
+}
+
+// needs a newer Node than the rest, and nothing else depends on it
+function openMemory(enabled: boolean, options: () => MemoryOptions): Memory | undefined {
+  if (!enabled) return undefined;
+  try {
+    return new Memory(options());
+  } catch (err) {
+    console.error(pc.yellow(`! Memory is off: ${(err as Error).message}`));
+    return undefined;
+  }
 }
 
 async function main(): Promise<void> {
@@ -88,6 +101,14 @@ async function main(): Promise<void> {
   // started now but only waited for at the first request, so slow servers don't hold up the prompt
   const mcpTools = mcp.connect();
 
+  const memory = openMemory(config.memory !== false, () => ({
+    path: join(CONFIG_DIR, "memory.db"),
+    cwd,
+    embedder: createEmbedder(config, current.profile),
+    sessions: () => store.others(cwd, session.id),
+  }));
+  if (memory) tools.add(memoryTools(memory));
+
   const agent = new Agent({
     provider: createProvider(current.profile),
     tools,
@@ -100,7 +121,8 @@ async function main(): Promise<void> {
     projectContext: async (signal, notify) => {
       tools.add(await mcpTools);
       for (const [name, error] of mcp.errors) notify(`MCP server ${name} didn't start: ${error}`);
-      return config.repoMap === false ? "" : repoMapSection(await repoMapFor(cwd).build({ signal }));
+      const map = config.repoMap === false ? "" : repoMapSection(await repoMapFor(cwd).build({ signal }));
+      return [map, memory ? memorySection(memory.notes()) : ""].filter(Boolean).join("\n\n");
     },
     maxSteps: Number(opts.maxSteps),
     searxngUrl: config.searxngUrl,
@@ -114,6 +136,7 @@ async function main(): Promise<void> {
   process.on("exit", () => {
     agent.dispose();
     mcp.close();
+    memory?.close();
   });
   const resumeHint = () =>
     session.messages.length ? pc.dim(`Resume this session with: autocode --resume ${session.id}`) : "";
@@ -156,11 +179,13 @@ async function main(): Promise<void> {
       banner,
       initialPrompt,
       mcpStatus: () => mcp.status(),
+      memoryStatus: () => (memory ? memoryStatus(memory) : "Memory is off."),
       modelLabel,
       switchModel: (spec: string) => {
         const next = resolveModelSpec(config, spec, current.name);
         agent.provider = createProvider(next.profile);
         agent.contextLimit = next.profile.contextLimit ?? DEFAULT_CONTEXT_LIMIT;
+        if (memory) memory.embedder = createEmbedder(config, next.profile);
         current = next;
         return modelLabel();
       },

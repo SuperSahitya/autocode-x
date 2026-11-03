@@ -2,7 +2,8 @@ import type { z } from "zod";
 import type { ProcessManager } from "./processes.js";
 import type { ShellInfo } from "./shell.js";
 
-export type ToolKind = "read" | "write" | "exec" | "network";
+/** "memory" changes saved notes, so it asks like a write but has nothing for /undo to restore */
+export type ToolKind = "read" | "write" | "exec" | "network" | "memory";
 
 export interface ToolContext {
   cwd: string;

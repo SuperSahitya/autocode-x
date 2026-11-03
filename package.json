@@ -10,7 +10,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -20,6 +20,7 @@
     "bench:retry": "tsx bench/retry.ts",
     "bench:repomap": "tsx bench/repomap.ts",
     "bench:compaction": "tsx bench/compaction.ts",
+    "bench:memory": "tsx bench/memory.ts",
     "eval": "tsx bench/eval.ts"
   },
   "license": "MIT",
@@ -33,6 +34,7 @@
     "marked": "^18.1.1",
     "picocolors": "^1.1.1",
     "react": "^19.3.1",
+    "sqlite-vec": "^0.1.9",
     "turndown": "^7.2.4",
     "web-tree-sitter": "0.25.10",
     "zod": "^4.6.7"

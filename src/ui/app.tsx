@@ -25,6 +25,7 @@ export interface AppProps {
   switchModel(spec: string): string;
   initialPrompt?: string;
   mcpStatus?(): string;
+  memoryStatus?(): string;
 }
 
 type EntryData =
@@ -37,7 +38,7 @@ interface LiveTool {
   output: string;
 }
 
-const COMMANDS = ["/help", "/undo", "/compact", "/clear", "/model", "/models", "/ps", "/mcp", "/yolo", "/usage", "/exit"];
+const COMMANDS = ["/help", "/undo", "/compact", "/clear", "/model", "/models", "/ps", "/mcp", "/memory", "/yolo", "/usage", "/exit"];
 
 const HELP = `Commands
   /undo           revert the files changed by the last turn and drop it from the conversation
@@ -46,6 +47,7 @@ const HELP = `Commands
   /models         list models from the current provider
   /ps             list background processes
   /mcp            list MCP servers and their tools
+  /memory         list notes saved for this project
   /clear          start a new conversation
   /yolo           toggle auto-approve for writes and commands
   /usage          requests, tokens and context used by this session
@@ -94,7 +96,7 @@ export function splitCompleted(text: string): [done: string, rest: string] {
   return ["", text];
 }
 
-export function App({ agent, permissions, bridge, banner, modelLabel, switchModel, initialPrompt, mcpStatus }: AppProps) {
+export function App({ agent, permissions, bridge, banner, modelLabel, switchModel, initialPrompt, mcpStatus, memoryStatus }: AppProps) {
   const { exit } = useApp();
   const nextId = useRef(0);
   const [entries, setEntries] = useState<Entry[]>(() => {
@@ -271,6 +273,8 @@ export function App({ agent, permissions, bridge, banner, modelLabel, switchMode
       }
       case "/mcp":
         return info(mcpStatus?.() ?? "No MCP servers configured.");
+      case "/memory":
+        return info(memoryStatus?.() ?? "Memory is off.");
       case "/yolo":
         permissions.mode = permissions.mode === "auto" ? "ask" : "auto";
         setYolo(permissions.mode === "auto");

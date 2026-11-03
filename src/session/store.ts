@@ -64,6 +64,13 @@ export class SessionStore {
     return JSON.parse(readFileSync(join(this.dir, file), "utf8")) as Session;
   }
 
+  /** Every saved session for this project except the given one. */
+  others(cwd: string, id: string): Session[] {
+    return this.forProject(cwd)
+      .filter((f) => !f.endsWith(`_${id}.json`))
+      .map((f) => JSON.parse(readFileSync(join(this.dir, f), "utf8")) as Session);
+  }
+
   list(cwd: string, limit = 10): SessionSummary[] {
     return this.forProject(cwd)
       .slice(0, limit)

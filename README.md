@@ -4,6 +4,8 @@ A coding agent for the terminal. Works with Gemini, Anthropic, Groq, Ollama and 
 
 ## Setup
 
+Needs Node 22.13 or newer.
+
 ```
 npm install
 npm run build
@@ -22,7 +24,13 @@ autocode -p "fix the build" -y        # one-shot, auto-approve
 autocode --resume                     # continue the last session here
 ```
 
-Commands: `/undo`, `/compact`, `/model`, `/models`, `/ps`, `/mcp`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`.
+Commands: `/undo`, `/compact`, `/model`, `/models`, `/ps`, `/mcp`, `/memory`, `/clear`, `/yolo`, `/usage`, `/help`, `/exit`.
+
+## Memory
+
+The agent can save notes for later sessions and search them along with past conversations. Tool output isn't searched. Everything is kept per project in `~/.autocode/memory.db`.
+
+On a Gemini profile, search also uses `gemini-embedding-2`, which sends those notes and conversations to Google. Other profiles only search by keyword unless you set `"memoryEmbeddings": true`. `"memory": false` turns it all off.
 
 ## Config
 
