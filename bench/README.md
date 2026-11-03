@@ -8,7 +8,7 @@ npm run bench:compaction   # 4 model requests per session, cached in results/com
 
 `npm run eval` is separate: see [Eval](#eval).
 
-Retries, compaction and repo map are from commit `2a279aa`.
+Retries are from commit `be6f7ce`, compaction and repo map from `2a279aa`.
 
 ## Retries
 
@@ -18,11 +18,11 @@ The real agent and HTTP client run a 5-step task against a local server that inj
 |---|---|---|---|---|
 | 10% | 100% | 54.5% | 0 | 0 |
 | 25% | 100% | 16.0% | 0 | 0 |
-| 50% | 97.0% | 0.5% | 0 | 0 |
+| 50% | 99.5% | 0.5% | 0 | 0 |
 
 No retry arrived before the delay the server asked for. A used-up daily quota, a billing error, a wait over 2 minutes and a bad key each stop after 1 request.
 
-This benchmark found a bug: a stream closed early was accepted as a full answer, giving 28 wrong answers in 200 runs at 50% faults, and 86% completion. Fixed in `b5e0305`.
+This benchmark found a bug: a stream closed early was accepted as a full answer, giving 28 wrong answers in 200 runs at 50% faults, and 86% completion. Fixed in `b5e0305`, which brought it to 97%. Allowing 5 stream retries instead of 3 then brought it to 99.5% in `be6f7ce`.
 
 Stalled streams aren't covered, since the timeout is 3 minutes.
 
@@ -86,4 +86,15 @@ On `gemini-3.5-flash-lite`, with one run per task: 9 of 10 passed (CI 70-100%), 
 
 The first run hit `MALFORMED_RESPONSE` from Gemini on 2 tasks, which stopped the agent. Fixed in `c84afe4`, and those 2 tasks were rerun with the fix, which retried the error twice on `10-csv`. The other 8 ran just before it.
 
-There's no run with a feature switched off, so this doesn't show what the repo map or compaction add. Telling the model to batch tool calls had little visible effect: 119 tool calls in 118 requests.
+Telling the model to batch tool calls had little visible effect: 119 tool calls in 118 requests.
+
+`--features-off` runs the same tasks with no repo map, trimming or compaction, once:
+
+| | Passed | Requests | Tool calls | Input tokens | Time |
+|---|---|---|---|---|---|
+| Features on | 9 of 10 | 118 | 119 | 434,844 | 19 min |
+| Features off | 9 of 10 | 128 | 136 | 541,992 | 29 min |
+
+The features didn't change the pass rate. Turning them off cost 25% more input tokens and 8% more requests, but tasks went both ways (6 used more requests, 3 fewer, 1 the same) and each ran once, so that could be noise. These repos are a few files each, and sessions never got big enough to trim or compact, so this only tests the repo map, on projects too small to need one. Time isn't comparable, since the off run hit more Gemini 503s.
+
+`03-json-flag` failed the same way in both runs, reordering the plain output, and passed on one extra attempt that isn't counted above. So it's flaky: 1 pass in 3.
