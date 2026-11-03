@@ -54,6 +54,19 @@ test("a 429 waits for the delay in the body, then succeeds", async () => {
   }
 });
 
+test("a Gemini per-minute limit waits, even though its message mentions billing", async () => {
+  const message = "You exceeded your current quota, please check your plan and billing details. Quota exceeded for metric: embed_content_free_tier_requests, limit: 100";
+  const body = JSON.stringify({ error: { code: 429, message, details: [{ quotaId: "EmbedContentRequestsPerMinutePerProjectPerModel-FreeTier" }, { retryDelay: "1s" }] } });
+  const server = await statusServer([{ status: 429, body }, { status: 200, body: "ok" }]);
+  try {
+    const res = await postWithRetry(server.url, {}, {});
+    assert.equal(await res.text(), "ok");
+    assert.equal(server.hits(), 2);
+  } finally {
+    server.close();
+  }
+});
+
 test("a used-up daily quota fails on the first request", async () => {
   const body = JSON.stringify({ error: { code: 429, message: "quota", details: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }, { retryDelay: "1s" }] } });
   const server = await statusServer([{ status: 429, body }]);

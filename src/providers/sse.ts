@@ -153,7 +153,8 @@ export function retryHint(header: string | null, body: string): number | undefin
   return undefined;
 }
 
-export const isQuotaExhausted = (body: string) => /PerDay|per day|insufficient_quota|billing/i.test(body);
+// not plain "billing": Gemini's per-minute limits also tell you to check your plan and billing details
+export const isQuotaExhausted = (body: string) => /PerDay|per day|insufficient_quota|billing_hard_limit/i.test(body);
 
 function errorMessage(body: string): string {
   try {
