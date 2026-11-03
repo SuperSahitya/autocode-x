@@ -8,7 +8,7 @@ npm run bench:compaction   # 4 model requests per session, cached in results/com
 
 `npm run eval` is separate: see [Eval](#eval).
 
-Everything below is from commit `2a279aa`.
+Retries, compaction and repo map are from commit `2a279aa`.
 
 ## Retries
 
@@ -81,3 +81,9 @@ npm run eval                    # real model, stops at 150 requests, finished ta
 npm run eval -- --only csv
 npm run eval -- --cap 50
 ```
+
+On `gemini-3.5-flash-lite`, with one run per task: 9 of 10 passed (CI 70-100%), using 118 requests, an average of 11.8 per task. The failure is `03-json-flag`: the flag works, but the agent also reordered the plain output it was told to leave alone.
+
+The first run hit `MALFORMED_RESPONSE` from Gemini on 2 tasks, which stopped the agent. Fixed in `c84afe4`, and those 2 tasks were rerun with the fix, which retried the error twice on `10-csv`. The other 8 ran just before it.
+
+There's no run with a feature switched off, so this doesn't show what the repo map or compaction add. Telling the model to batch tool calls had little visible effect: 119 tool calls in 118 requests.
