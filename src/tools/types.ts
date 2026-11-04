@@ -12,6 +12,8 @@ export interface ToolContext {
   /** abs path -> mtimeMs at last read/write */
   fileState: Map<string, number>;
   processes: ProcessManager;
+  /** counts the user's requests, for limits that start over with each one */
+  turn: number;
   searxngUrl?: string;
   /** streams a running command's output to the UI */
   onOutput?: (chunk: string) => void;

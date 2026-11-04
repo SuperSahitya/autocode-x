@@ -286,6 +286,51 @@ test("the tools report what they did and label results as background", async () 
   assert.equal((await call("forget", { id: 1 })).isError, true);
 });
 
+test("recall stops after three searches in a request and starts over with the next", async () => {
+  let searches = 0;
+  const memory = open();
+  const original = memory.recall.bind(memory);
+  memory.recall = (...args) => {
+    searches++;
+    return original(...args);
+  };
+  memory.remember("use pnpm here");
+  const registry = new ToolRegistry(memoryTools(memory));
+  const ctx = makeCtx(tempDir());
+  const recall = async (turn: number) => (await registry.execute(registry.get("recall")!, { query: "pnpm" }, { ...ctx, turn })).output;
+
+  assert.doesNotMatch(await recall(1), /last search/);
+  assert.doesNotMatch(await recall(1), /last search/);
+  assert.match(await recall(1), /use pnpm here[\s\S]*That was the last search[\s\S]*no record/);
+  assert.match(await recall(1), /^Not searched: the limit is 3 searches per request/);
+  assert.equal(searches, 3);
+
+  assert.match(await recall(2), /use pnpm here/);
+  assert.equal(searches, 4);
+});
+
+test("the agent's requests each get their own recall limit, even for searches sent together", async () => {
+  const memory = open();
+  memory.remember("use pnpm here");
+  const search = (id: string) => ({ type: "tool_call" as const, call: { type: "tool_call" as const, id, name: "recall", input: { query: "pnpm" } } });
+  const done = { type: "done" as const, stopReason: "tool_use" as const, usage: { inputTokens: 1, outputTokens: 1 } };
+  const provider = new ScriptedProvider([[search("1"), search("2"), search("3"), search("4"), done], textStep("first"), [search("5"), done], textStep("second")]);
+  const agent = new Agent({
+    provider,
+    tools: new ToolRegistry(memoryTools(memory)),
+    permissions: new Permissions("auto", async () => "allow"),
+    system: "test",
+    cwd: tempDir(),
+    shell: detectShell(),
+  });
+  const results = () => agent.messages.flatMap((m) => m.content.flatMap((p) => (p.type === "tool_result" ? [p.content] : [])));
+
+  await agent.run("first request");
+  assert.equal(results().filter((r) => r.startsWith("Not searched")).length, 1);
+  await agent.run("second request");
+  assert.match(results().at(-1)!, /use pnpm here/);
+});
+
 test("saving a note asks permission and takes no checkpoint, while recall doesn't ask", async () => {
   const memory = open();
   const asked: string[] = [];

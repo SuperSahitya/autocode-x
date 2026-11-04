@@ -16,6 +16,7 @@ export const makeCtx = (cwd: string): ToolContext => ({
   shell: detectShell(),
   fileState: new Map(),
   processes: new ProcessManager(),
+  turn: 1,
 });
 
 /**

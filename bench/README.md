@@ -64,9 +64,9 @@ New sessions on `gemini-3.5-flash-lite`, one run per question:
 | Answer is in memory, memory off | 0 of 7 |
 | Answer is in memory, memory on | 8 of 8 |
 | Told in one session, asked in the next | 3 of 3 |
-| Nothing to find | 0 of 2 |
+| Nothing to find, says there's no record | 2 of 2 |
 
-With nothing to find, the model made nothing up, but it kept searching until the 6-step limit and never said so.
+With nothing to find, the model used to keep searching until the 6-step limit and never answer, even when the tool description told it to stop. Limiting `recall` to 3 searches per request fixed that in these two questions. No answerable question used more than 2 searches, so those weren't run again.
 
 ## Eval
 

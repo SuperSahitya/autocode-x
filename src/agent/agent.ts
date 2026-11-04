@@ -93,6 +93,7 @@ export class Agent {
   readonly checkpoints: Checkpoint[] = [];
   private readonly fileState = new Map<string, number>();
   private turn?: TurnState;
+  private turnCount = 0;
   private checkpointNoticeShown = false;
   /** what the API reported for the last request, which beats estimating */
   private lastRequest?: { tokens: number; messageCount: number };
@@ -193,6 +194,7 @@ export class Agent {
 
   async run(userText: string, events: AgentEvents = {}, signal = new AbortController().signal): Promise<void> {
     const last = this.messages.at(-1);
+    this.turnCount++;
     this.turn = {
       label: userText,
       messageCount: this.messages.length,
@@ -295,6 +297,7 @@ export class Agent {
       shell: this.opts.shell,
       fileState: this.fileState,
       processes: this.processes,
+      turn: this.turnCount,
       searxngUrl: this.opts.searxngUrl,
     };
     const prepared: PreparedCall[] = calls.map((call) => {
